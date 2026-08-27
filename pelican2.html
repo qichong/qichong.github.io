@@ -2,65 +2,40 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pelican × Rolling Earth — SVG</title>
+<title>Pelican × Rolling Earth</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#08151d;color:#eef7f8}.stage{width:100%;height:100%;position:relative;display:grid;place-items:center;background:radial-gradient(circle at 50% 42%,#234a58 0,#102b35 38%,#08151d 76%)}.star{position:absolute;width:100%;height:100%;background-image:radial-gradient(circle,#fff 0 1px,transparent 1.4px);background-size:110px 110px;opacity:.18}.caption{position:absolute;top:26px;left:30px;font-size:11px;letter-spacing:.24em;opacity:.55}.caption2{position:absolute;top:23px;right:30px;text-align:right}.caption2 b{display:block;font-size:13px;letter-spacing:.16em}.caption2 span{font-size:11px;opacity:.5}.wrap{width:min(1080px,96vw);aspect-ratio:1.55/1}.wrap svg{width:100%;height:100%;overflow:visible}.cloud{fill:none;stroke:#a1d8df;stroke-width:5;stroke-linecap:round;opacity:.2}.ocean{fill:#2f8ca0}.land{fill:#9bce78;stroke:#28594a;stroke-width:3}.ice{fill:#e9f5f0}.lat{fill:none;stroke:#bcecf0;stroke-width:2;opacity:.24}.bikeFrame{fill:none;stroke:#1f2629;stroke-width:8;stroke-linecap:round;stroke-linejoin:round}.wheel{fill:none;stroke:#f1f6f5;stroke-width:7}.spoke{stroke:#6d7b82;stroke-width:2}.thin{fill:none;stroke:#6b777d;stroke-width:4;stroke-linecap:round}.pelican{fill:#eef1ed}.pelicanDark{fill:#485456}.beak{fill:#e5a642}.eye{fill:#11191b}.leg{fill:none;stroke:#d79839;stroke-width:7;stroke-linecap:round}.foot{fill:none;stroke:#d79839;stroke-width:6;stroke-linecap:round}.speed{fill:none;stroke:#9ddfe7;stroke-width:4;stroke-linecap:round;opacity:.45}.label{fill:rgba(7,20,26,.72);stroke:rgba(175,231,235,.2)}.labelText{fill:#d9f3f4;font-size:13px;letter-spacing:.08em}.controls{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:10px}.btn{border:1px solid rgba(190,235,238,.18);background:rgba(9,25,31,.55);color:#e8f6f7;border-radius:999px;padding:8px 14px;cursor:pointer;backdrop-filter:blur(8px)}.btn:hover{background:rgba(26,56,64,.8)}
-/* 地球地表：只允许经度纹理平移，不影响自行车 */.earthTexture{animation:earthMove 14s linear infinite}.wheelL,.wheelR{animation:wheelMove .9s linear infinite;transform-box:fill-box;transform-origin:center}.pedal{animation:pedalMove .9s linear infinite;transform-box:fill-box;transform-origin:center}.bird{animation:birdBob .8s ease-in-out infinite;transform-box:fill-box;transform-origin:center bottom}.clouds{animation:cloudMove 10s ease-in-out infinite alternate}.paused *{animation-play-state:paused!important}
-@keyframes earthMove{from{transform:translateX(0)}to{transform:translateX(-250px)}}@keyframes wheelMove{to{transform:rotate(360deg)}}@keyframes pedalMove{to{transform:rotate(360deg)}}@keyframes birdBob{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-4px) rotate(1deg)}}@keyframes cloudMove{from{transform:translateX(-35px)}to{transform:translateX(45px)}}
-@media(max-width:700px){.caption{left:14px;top:14px}.caption2{right:14px;top:13px}.wrap{width:116vw}.controls{bottom:12px}.labelText{font-size:11px}}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#06141c;color:#effafa;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.stage{width:100%;height:100%;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 50% 38%,#204957 0,#0d2731 40%,#06141c 78%)}.stars{position:absolute;inset:0;opacity:.25;background-image:radial-gradient(circle,#fff 0 1px,transparent 1.5px);background-size:100px 100px}.top{position:absolute;top:25px;left:30px;font-size:11px;letter-spacing:.24em;opacity:.55}.title{position:absolute;top:22px;right:30px;text-align:right}.title b{display:block;font-size:14px;letter-spacing:.16em}.title span{font-size:11px;opacity:.5}.scene{width:min(1120px,96vw)}svg{display:block;width:100%;height:auto}.cloud{fill:none;stroke:#98d5dc;stroke-width:5;stroke-linecap:round;opacity:.18}.grid{fill:none;stroke:#c5eef1;stroke-width:2;opacity:.22}.land{fill:#9bd078;stroke:#205547;stroke-width:3}.ice{fill:#edf6f1}.earthEdge{fill:none;stroke:#8be0e7;stroke-width:3;opacity:.35}.frame{fill:none;stroke:#20272a;stroke-width:8;stroke-linecap:round;stroke-linejoin:round}.rim{fill:none;stroke:#eef7f5;stroke-width:7}.spoke{stroke:#738289;stroke-width:2}.thin{fill:none;stroke:#69777e;stroke-width:4;stroke-linecap:round}.body{fill:#f0f3ef}.shade{fill:#cbd4d0}.dark{fill:#4b5759}.beak{fill:#e7a84e}.eye{fill:#111819}.leg{fill:none;stroke:#d89b40;stroke-width:7;stroke-linecap:round;stroke-linejoin:round}.speed{fill:none;stroke:#9cdde5;stroke-width:4;stroke-linecap:round;opacity:.4}.label{fill:rgba(8,23,29,.7);stroke:rgba(170,231,235,.2)}.labelText{fill:#d8f3f4;font-size:13px;letter-spacing:.08em}.map{animation:mapMove 10s linear infinite}.wheel{transform-box:fill-box;transform-origin:center;animation:wheelMove .75s linear infinite}.pedal{transform-box:fill-box;transform-origin:center;animation:wheelMove .75s linear infinite}.bird{transform-box:fill-box;transform-origin:center bottom;animation:bob .75s ease-in-out infinite}.clouds{animation:cloudMove 10s ease-in-out infinite alternate}.paused *{animation-play-state:paused!important}@keyframes mapMove{from{transform:translateX(0)}to{transform:translateX(-250px)}}@keyframes wheelMove{to{transform:rotate(360deg)}}@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}@keyframes cloudMove{from{transform:translateX(-30px)}to{transform:translateX(40px)}}.ui{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:8px}.btn{border:1px solid #31515c;background:#0b252e;color:#edf8f8;border-radius:999px;padding:9px 15px;cursor:pointer}.btn:hover{background:#12343e}@media(max-width:700px){.scene{width:118vw}.top{top:14px;left:14px}.title{top:12px;right:14px}.ui{bottom:12px}}
 </style>
 </head>
-<body><div class="stage" id="stage"><div class="star"></div><div class="caption">SVG MOTION STUDY</div><div class="caption2"><b>PELICAN × EARTH</b><span>车轮与地球 · 两套独立运动</span></div>
-<div class="wrap"><svg viewBox="0 0 1000 645" role="img" aria-label="一只鹈鹕骑着自行车，在滚动的地球上前进">
-<defs><clipPath id="globeClip"><circle cx="500" cy="405" r="190"/></clipPath><radialGradient id="globe" cx="34%" cy="22%"><stop offset="0" stop-color="#4cc0d0"/><stop offset="1" stop-color="#164d60"/></radialGradient></defs>
-<g class="clouds"><path class="cloud" d="M110 190c34-24 72 4 57 27 37-11 72 10 53 31-25 27-72 6-98 21-35 19-71-9-51-31 13-14 30-17 52-15"/><path class="cloud" d="M760 170c31-18 64 3 53 24 35-5 64 15 47 31-25 23-66 1-90 14-31 16-63-8-46-28 13-14 26-14 36-11"/></g>
-<circle cx="500" cy="405" r="190" fill="url(#globe)"/>
-<g clip-path="url(#globeClip)">
-  <path class="lat" d="M310 405h380M322 350h356M322 460h356M500 215v380M447 220c-41 70-41 300 0 370M553 220c41 70 41 300 0 370"/>
-  <g class="earthTexture">
-    <g>
-      <path class="land" d="M330 343l54-40 61-12 22 25-12 34-26 4-18 24-43 11-31-18z"/>
-      <path class="land" d="M476 260l45-6 29 25-13 28-25 4-11 29-22-8-11-35z"/>
-      <path class="land" d="M561 305l55-16 48 28 5 37-25 19-43-7-21-22-32 9-14-24z"/>
-      <path class="land" d="M608 389l47 12 24 27-13 28-32 5-18-22-35-9z"/>
-      <path class="land" d="M474 423l28 8 8 39-13 46-28 18-15-27 8-36-17-25z"/>
-      <path class="ice" d="M346 222h308l-15 29-42-11-47 7-42-12-49 13-51-10z"/>
-      <path class="ice" d="M348 545l51 6 54-13 40 12 50-12 55 15-12 34H367z"/>
-    </g>
-    <!-- 第二份地图用于无缝循环 -->
-    <g transform="translate(250 0)">
-      <path class="land" d="M330 343l54-40 61-12 22 25-12 34-26 4-18 24-43 11-31-18z"/>
-      <path class="land" d="M476 260l45-6 29 25-13 28-25 4-11 29-22-8-11-35z"/>
-      <path class="land" d="M561 305l55-16 48 28 5 37-25 19-43-7-21-22-32 9-14-24z"/>
-      <path class="land" d="M608 389l47 12 24 27-13 28-32 5-18-22-35-9z"/>
-      <path class="ice" d="M346 222h308l-15 29-42-11-47 7-42-12-49 13-51-10z"/>
-    </g>
-  </g>
+<body>
+<div class="stage" id="stage"><div class="stars"></div><div class="top">SVG MOTION STUDY</div><div class="title"><b>PELICAN × EARTH</b><span>地球自转 · 自行车独立运转 · 真实踩踏</span></div>
+<div class="scene"><svg viewBox="0 0 1000 650" aria-label="鹈鹕在滚动的地球上骑自行车">
+<defs><clipPath id="earthClip"><circle cx="500" cy="405" r="190"/></clipPath><radialGradient id="sea" cx="35%" cy="22%"><stop offset="0" stop-color="#4fc0d2"/><stop offset="1" stop-color="#154b5d"/></radialGradient></defs>
+<path class="cloud" d="M115 190c32-23 69 4 55 27 38-11 75 11 51 32-29 24-69 1-96 16-35 18-72-8-52-30 13-15 27-18 42-16"/><path class="cloud" d="M770 172c29-19 62 2 51 23 34-7 65 14 45 31-27 21-65 0-91 13-31 15-61-9-45-28 12-13 25-13 40-10"/>
+<circle cx="500" cy="405" r="190" fill="url(#sea)"/>
+<g clip-path="url(#earthClip)"><path class="grid" d="M310 405h380M320 350h360M320 460h360M500 215v380M445 220c-43 70-43 300 0 370M555 220c43 70 43 300 0 370"/>
+<g class="map"><g transform="translate(0)"><path class="land" d="M326 337l52-34 61-12 26 24-14 37-28 6-18 25-43 10-30-18z"/><path class="land" d="M475 260l46-6 27 26-13 28-24 5-12 30-21-8-12-34z"/><path class="land" d="M560 306l58-17 46 30 8 36-27 20-42-7-23-23-31 9-15-24z"/><path class="land" d="M607 390l49 12 22 28-14 28-30 5-19-23-35-9z"/><path class="land" d="M472 424l29 8 9 39-13 45-28 18-15-28 8-36-17-24z"/><path class="ice" d="M345 222h310l-16 29-43-11-48 7-42-12-51 13-49-11z"/><path class="ice" d="M346 548h310l-22 34H370z"/></g><g transform="translate(250)"><path class="land" d="M326 337l52-34 61-12 26 24-14 37-28 6-18 25-43 10-30-18z"/><path class="land" d="M475 260l46-6 27 26-13 28-24 5-12 30-21-8-12-34z"/><path class="land" d="M560 306l58-17 46 30 8 36-27 20-42-7-23-23-31 9-15-24z"/><path class="land" d="M607 390l49 12 22 28-14 28-30 5-19-23-35-9z"/><path class="ice" d="M345 222h310l-16 29-43-11-48 7-42-12-51 13-49-11z"/></g></g></g>
+<circle class="earthEdge" cx="500" cy="405" r="190"/>
+<!-- 自行车：不属于地球 map 图层，完全独立 -->
+<g id="bike">
+<g class="wheel" id="wheelLeft"><circle class="rim" cx="405" cy="404" r="68"/><g class="spoke"><path d="M405 336v136M337 404h136M357 356l96 96M357 452l96-96"/></g></g>
+<g class="wheel" id="wheelRight"><circle class="rim" cx="620" cy="404" r="68"/><g class="spoke"><path d="M620 336v136M552 404h136M572 356l96 96M572 452l96-96"/></g></g>
+<g class="frame"><path d="M405 404l80-70 70 70h65M485 334l135 70M485 334l-24-75M485 334l-50 70M461 259h50"/></g>
+<g class="pedal" id="crank"><circle cx="485" cy="334" r="14" fill="#d0a04a" stroke="#20272a" stroke-width="6"/><path class="thin" d="M485 334l31 20"/></g>
+<!-- 腿：完全由 JS 按曲柄角度计算，左右腿相位相反 -->
+<g class="bird" id="bird">
+<ellipse class="body" cx="505" cy="222" rx="64" ry="49"/><path class="shade" d="M453 216c23-39 85-52 117-19-18 31-52 45-95 41z"/><path class="body" d="M486 185c-19-34-8-61 23-70 30-9 53 12 53 37 0 19-17 31-38 40z"/><path class="beak" d="M540 158c54-1 92 12 104 29-23 22-71 24-101 11z"/><circle class="eye" cx="548" cy="149" r="5"/><path class="dark" d="M458 210c-25 14-35 32-31 57 28 18 57 7 69-16z"/><path class="body" d="M514 222c-20 11-36 33-36 55 21 12 43 4 57-17z"/>
+<path class="leg" id="legL"/><path class="leg" id="legR"/>
 </g>
-<circle cx="500" cy="405" r="190" fill="none" stroke="#8edbe5" stroke-width="3" opacity=".35"/>
-<!-- 自行车完整放在地球动画之外，因此永远不会跟地球纹理一起动 -->
-<g transform="translate(0,-12)">
-  <g class="bikeFrame">
-    <g class="wheelL"><circle class="wheel" cx="410" cy="390" r="67"/><g class="spoke"><path d="M410 323v134M343 390h134M363 343l94 94M363 437l94-94"/></g></g>
-    <g class="wheelR"><circle class="wheel" cx="615" cy="390" r="67"/><g class="spoke"><path d="M615 323v134M548 390h134M568 343l94 94M568 437l94-94"/></g></g>
-    <path d="M410 390l80-67 64 67h61M490 323l125 67M490 323l-21-76M490 323l-48 67"/>
-    <path d="M469 247h45"/>
-  </g>
-  <g class="pedal"><circle cx="490" cy="323" r="14" fill="#cb9b49" stroke="#20272b" stroke-width="6"/><path class="thin" d="M490 323l29 20M490 323l-24-20"/></g>
-  <g class="bird">
-    <ellipse class="pelican" cx="507" cy="220" rx="64" ry="49"/>
-    <path fill="#cbd4d0" d="M454 214c22-40 85-52 117-19-18 32-54 45-97 41z"/>
-    <path class="pelican" d="M486 184c-19-34-8-61 23-70 31-9 53 12 53 37 0 18-17 31-38 39z"/>
-    <path class="beak" d="M541 158c54-1 92 12 104 28-21 23-69 25-100 12z"/>
-    <circle class="eye" cx="548" cy="149" r="5"/>
-    <path class="pelicanDark" d="M459 209c-24 14-34 32-30 57 29 18 58 7 70-16z"/>
-    <path class="pelican" d="M514 221c-20 11-36 33-36 55 21 11 42 4 57-17z"/>
-    <path class="leg" d="M494 269l-5 38M527 269l8 38"/><path class="foot" d="M489 307l-16 9M489 307l16 5M535 307l-15 8M535 307l17 2"/>
-  </g>
-  <path class="speed" d="M323 337h-62M337 359h-78M312 382h-46"/>
+<path class="speed" d="M318 346h-65M333 370h-82M307 394h-48"/>
 </g>
-<g transform="translate(704 535)"><rect class="label" width="236" height="44" rx="22"/><text class="labelText" x="18" y="28">EARTH ROLL  •  BIKE SPIN</text></g>
+<g transform="translate(700 548)"><rect class="label" width="245" height="44" rx="22"/><text class="labelText" x="18" y="28">EARTH ROLL  •  PEDAL SYNC</text></g>
 </svg></div>
-<div class="controls"><button class="btn" id="pause">暂停</button><button class="btn" id="speed">加速</button><button class="btn" id="reset">正常速度</button></div></div>
-<script>const stage=document.getElementById('stage');let rate=1;const earth=document.querySelector('.earthTexture');const wheels=document.querySelectorAll('.wheelL,.wheelR,.pedal');function apply(){earth.style.animationDuration=(14/rate)+'s';wheels.forEach(x=>x.style.animationDuration=(.9/rate)+'s')}document.getElementById('speed').onclick=()=>{rate=Math.min(3,rate+.25);apply()};document.getElementById('reset').onclick=()=>{rate=1;apply()};document.getElementById('pause').onclick=e=>{stage.classList.toggle('paused');e.currentTarget.textContent=stage.classList.contains('paused')?'继续':'暂停'};</script>
-</body></html>
+<div class="ui"><button class="btn" id="pause">暂停</button><button class="btn" id="fast">加速</button><button class="btn" id="reset">正常速度</button></div></div>
+<script>
+const stage=document.getElementById('stage');const pause=document.getElementById('pause');const speedBtn=document.getElementById('fast');const reset=document.getElementById('reset');const earth=document.querySelector('.map');const bikeWheels=document.querySelectorAll('#wheelLeft,#wheelRight,#crank');const legL=document.getElementById('legL');const legR=document.getElementById('legR');let rate=1;let pedalAngle=0;let last=performance.now();let paused=false;
+function applySpeed(){earth.style.animationDuration=(10/rate)+'s';bikeWheels.forEach(el=>el.style.animationDuration=(.75/rate)+'s')}
+function legPath(hipX,hipY,phase){const kneeX=hipX+Math.cos(phase)*24;const kneeY=hipY+Math.sin(phase)*24+15;const footX=485+Math.cos(phase)*30;const footY=334+Math.sin(phase)*20;return `M ${hipX} ${hipY} L ${kneeX.toFixed(1)} ${kneeY.toFixed(1)} L ${footX.toFixed(1)} ${footY.toFixed(1)}`}
+function animate(now){const dt=Math.min(40,now-last);last=now;if(!paused){pedalAngle+=(dt*0.0075*rate);legL.setAttribute('d',legPath(494,268,pedalAngle));legR.setAttribute('d',legPath(526,268,pedalAngle+Math.PI))}requestAnimationFrame(animate)}
+requestAnimationFrame(animate);applySpeed();pause.onclick=()=>{paused=!paused;stage.classList.toggle('paused',paused);pause.textContent=paused?'继续':'暂停'};speedBtn.onclick=()=>{rate=Math.min(3,rate+.25);applySpeed()};reset.onclick=()=>{rate=1;applySpeed()};
+</script></body></html>
