@@ -2,7 +2,7 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ANIMAL / 3D 野生动物馆</title><link rel="stylesheet" href="./style.css"></head><body>
 <div id="app"><canvas id="stage"></canvas><div id="loading"><b>ANIMAL / 3D</b><span>正在唤醒野生动物…</span></div>
 <header><div class="brand">ANIMAL <i>/</i> 3D <small>WILDLIFE EXPLORER</small></div><div class="hint">拖动旋转 · 滚轮缩放</div></header>
-<aside class="left"><div class="index" id="animalNo">01</div><div class="latin" id="latin">PANTHERA LEO</div><h1 id="name">非洲狮</h1><p id="tagline">草原上的群居大型猫科动物。</p><button id="voiceBtn">▶ 开始语音讲解</button></aside>
+<aside class="left"><div class="index" id="animalNo">01</div><div class="latin" id="latin">PANTHERA LEO</div><h1 id="name">非洲狮</h1><p id="tagline">草原上的群居大型猫科动物。</p><button id="voiceBtn">▶ 开始语音讲解</button><div class="motion"><div class="motion-title">MOTION / 动作</div><div id="actions" class="actions"><button class="action active" data-action="idle">◌ Idle</button><button class="action" data-action="walk">↗ Walk</button><button class="action" data-action="roar">◉ Roar</button></div><small id="actionHint">原生动画优先；Roar 不存在时使用展示动作。</small></div></aside>
 <aside class="right"><div class="about">ABOUT THE SPECIES</div><div class="facts" id="facts"></div><p class="desc" id="desc"></p></aside>
 <footer><div class="animals"><button class="animal active" data-animal="lion"><span>01</span> 🦁 狮子</button><button class="animal" data-animal="tiger"><span>02</span> 🐯 老虎</button></div><div class="status"><span class="dot"></span><span id="modelStatus">准备加载</span></div></footer></div>
 <script type="module" src="./main.js"></script></body></html>
