@@ -129,28 +129,43 @@ async function fetchBuffer(kind) {
     refreshProgress();
     const res = await fetch(SPECIES[kind].url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`${SPECIES[kind].name} HTTP ${res.status}`);
-    s.total = Number(res.headers.get('content-length')) || 0;
+
+    // Do not trust Content-Length when the browser/CDN may transparently
+    // decode gzip/br. The decoded stream can be larger than the header value.
+    const encoding = res.headers.get('content-encoding');
+    const declaredTotal = Number(res.headers.get('content-length')) || 0;
+    s.total = encoding ? 0 : declaredTotal;
+
     if (!res.body) {
       const buf = await res.arrayBuffer();
       s.loaded = buf.byteLength;
-      if (!s.total) s.total = s.loaded;
+      s.total = buf.byteLength;
       refreshProgress();
       return buf;
     }
+
     const reader = res.body.getReader();
     const chunks = [];
+    let actualSize = 0;
     while (true) {
       const x = await reader.read();
       if (x.done) break;
       chunks.push(x.value);
-      s.loaded += x.value.byteLength;
-      if (s.total) s.loaded = Math.min(s.loaded, s.total);
+      actualSize += x.value.byteLength;
+      s.loaded = actualSize;
       refreshProgress();
     }
-    s.loaded = s.total || s.loaded;
-    const out = new Uint8Array(s.loaded);
+
+    // Allocate from the actual decoded stream size, never Content-Length.
+    // This prevents RangeError: offset is out of bounds on GitHub Pages/CDNs.
+    s.total = actualSize;
+    const out = new Uint8Array(actualSize);
     let offset = 0;
-    for (const c of chunks) { out.set(c, offset); offset += c.byteLength; }
+    for (const c of chunks) {
+      out.set(c, offset);
+      offset += c.byteLength;
+    }
+    s.loaded = actualSize;
     refreshProgress();
     return out.buffer;
   })();
