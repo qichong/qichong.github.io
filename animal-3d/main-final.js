@@ -1,7 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/DRACOLoader.js';
+import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/meshopt_decoder.module.js';
 
 const $ = (s) => document.querySelector(s);
 const SPECIES = {
@@ -32,6 +33,7 @@ const loader = new GLTFLoader();
 const draco = new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/');
 loader.setDRACOLoader(draco);
+loader.setMeshoptDecoder(MeshoptDecoder);
 
 let scene, camera, renderer, controls;
 let current = null;
@@ -161,7 +163,10 @@ async function load(kind) {
   state[kind].phase = 'parsing';
   stage(`正在解析 ${SPECIES[kind].name}`, `${SPECIES[kind].name}：正在解码压缩网格、建立材质与骨骼…`);
   refreshProgress();
-  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, '', resolve, reject));
+  const gltf = await new Promise((resolve, reject) => {
+    const basePath = new URL(SPECIES[kind].url, location.href).href.replace(/[^/]*$/, '');
+    loader.parse(buffer, basePath, resolve, reject);
+  });
   cache.set(kind, gltf);
   state[kind].phase = 'done';
   refreshProgress();
@@ -257,7 +262,8 @@ info('lion');
     setTimeout(() => $('#loading').classList.add('hide'), 350);
   } else {
     const failed = !lion?.gltf ? '狮子' : '老虎';
-    stage(`${failed} 模型加载失败`, (lion?.error || tiger?.error)?.message || '请刷新页面重试。');
-    $('#loadingMessage').textContent = `${failed}没有成功加载，浏览器控制台会显示具体错误。`;
+    const detail = (lion?.error || tiger?.error)?.message || '请刷新页面重试。';
+    stage(`${failed} 模型加载失败`, detail);
+    $('#loadingMessage').textContent = `${failed}没有成功加载，错误：${detail}`;
   }
 })();
