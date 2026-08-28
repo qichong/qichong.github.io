@@ -24,6 +24,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download Google Tiger GLB
+        run: |
+          set -e
+          mkdir -p animal-3d/models
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://storage.googleapis.com/ar-answers-in-search-models/static/Tiger/model.glb' \
+            -o animal-3d/models/tiger.glb
+          test -s animal-3d/models/tiger.glb
+          echo "Tiger GLB size: $(du -h animal-3d/models/tiger.glb | cut -f1)"
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
