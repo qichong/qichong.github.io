@@ -9,7 +9,7 @@ const data = {
     facts: [['栖息地', '非洲草原'], ['体重', '约 120–250 kg'], ['最高速度', '约 80 km/h']],
     desc: '狮子是现存最大的猫科动物之一。它们通常以群体形式生活，雄狮醒目的鬃毛是其最具代表性的特征之一。',
     speech: '你好，欢迎来到三维野生动物馆。现在看到的是非洲狮。狮子通常生活在非洲的草原和稀树草原地区，是少数具有稳定群居社会结构的大型猫科动物。',
-    url: 'https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb'
+    urls: ['https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb']
   },
   tiger: {
     no: '02', name: '孟加拉虎', latin: 'PANTHERA TIGRIS TIGRIS',
@@ -17,12 +17,12 @@ const data = {
     facts: [['栖息地', '森林与草原'], ['体重', '约 100–260 kg'], ['最高速度', '短距离约 60 km/h']],
     desc: '老虎是现存体型最大的猫科动物之一。橙色毛皮上的深色条纹能帮助它融入林下斑驳的光影环境。',
     speech: '你好，现在来到老虎展区。老虎是体型最大的现存猫科动物之一，通常以独居方式活动，具有非常出色的力量、感知能力和短距离爆发力。',
-    sourceUrl: 'https://www.42biz.in/3D.Models/tiger.glb'
+    urls: [
+      'https://huggingface.co/datasets/xhiroga/data/resolve/main/wilds/tripo3d/tiger.glb?download=true',
+      'https://www.42biz.in/3D.Models/tiger.glb'
+    ]
   }
 };
-
-// 用 CORS 友好的公共代理读取 Tiger GLB，避免原始站点的跨域限制。
-data.tiger.url = `https://api.allorigins.win/raw?url=${encodeURIComponent(data.tiger.sourceUrl)}`;
 
 let scene, camera, renderer, controls;
 const clock = new THREE.Clock();
@@ -30,11 +30,8 @@ let current = null;
 let mixer = null;
 let clips = [];
 let active = 'lion';
-let actionMode = 'idle';
-let actionClock = 0;
 const cache = new Map();
 const loader = new GLTFLoader();
-loader.setCrossOrigin('anonymous');
 const $ = (selector) => document.querySelector(selector);
 
 const patterns = {
@@ -42,6 +39,47 @@ const patterns = {
   walk: /walk|walking|stroll|run|running/i,
   roar: /roar|growl|attack|call|cry/i
 };
+
+const loadState = {
+  lion: { loaded: 0, total: 0, phase: 'waiting', bytesKnown: false },
+  tiger: { loaded: 0, total: 0, phase: 'waiting', bytesKnown: false }
+};
+
+function setLoadingUI(stage, message = '') {
+  $('#loadingStage').textContent = stage;
+  if (message) $('#loadingMessage').textContent = message;
+}
+
+function formatMB(bytes) {
+  return bytes > 0 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : '—';
+}
+
+function refreshProgress() {
+  const states = Object.values(loadState);
+  const known = states.filter((item) => item.bytesKnown && item.total > 0);
+  let percent = 0;
+  let loaded = states.reduce((sum, item) => sum + item.loaded, 0);
+  let total = states.reduce((sum, item) => sum + item.total, 0);
+
+  if (known.length === states.length) {
+    percent = total ? Math.round((loaded / total) * 100) : 0;
+  } else {
+    const completed = states.filter((item) => item.phase === 'done').length;
+    const current = states.find((item) => item.phase === 'downloading' || item.phase === 'parsing');
+    percent = Math.min(99, Math.round(((completed + (current ? (current.bytesKnown && current.total ? current.loaded / current.total : 0.35) : 0)) / states.length) * 100));
+  }
+
+  $('#progressFill').style.width = `${percent}%`;
+  $('#progressPercent').textContent = `${percent}%`;
+  $('#progressSize').textContent = total > 0 ? `${formatMB(loaded)} / ${formatMB(total)}` : '读取模型大小…';
+  $('#lionProgress').textContent = loadState.lion.phase === 'done' ? '完成' : loadState.lion.phase === 'parsing' ? '解析中' : loadState.lion.bytesKnown ? `${Math.round(loadState.lion.loaded / loadState.lion.total * 100)}%` : loadState.lion.phase === 'downloading' ? '下载中' : '等待';
+  $('#tigerProgress').textContent = loadState.tiger.phase === 'done' ? '完成' : loadState.tiger.phase === 'parsing' ? '解析中' : loadState.tiger.bytesKnown ? `${Math.round(loadState.tiger.loaded / loadState.tiger.total * 100)}%` : loadState.tiger.phase === 'downloading' ? '下载中' : '等待';
+
+  if (loadState.lion.phase === 'done' && loadState.tiger.phase === 'done') {
+    $('#progressFill').style.width = '100%';
+    $('#progressPercent').textContent = '100%';
+  }
+}
 
 function setup() {
   scene = new THREE.Scene();
@@ -79,50 +117,20 @@ function setup() {
 }
 
 function stopMixer() {
-  if (mixer) {
-    mixer.stopAllAction();
-    if (current) mixer.uncacheRoot(current);
-    mixer = null;
-  }
+  if (!mixer) return;
+  mixer.stopAllAction();
+  mixer = null;
   clips = [];
 }
 
 function removeCurrentFromScene() {
+  stopMixer();
   if (current) scene.remove(current);
   current = null;
-  stopMixer();
-}
-
-function makeFallbackTiger() {
-  const g = new THREE.Group();
-  const fur = new THREE.MeshStandardMaterial({ color: 0xd88927, roughness: 0.9 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x26170d, roughness: 1 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xf3e2c8, roughness: 1 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 48, 32), fur); body.scale.set(1.65, 0.82, 0.82); body.position.y = 1.25; g.add(body);
-  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 24), white); chest.scale.set(0.8, 1.25, 0.95); chest.position.set(0.8, 1.05, 0); g.add(chest);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.66, 40, 28), fur); head.position.set(1.45, 1.7, 0); g.add(head);
-  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.32, 28, 20), white); snout.scale.set(1.15, 0.8, 1); snout.position.set(1.86, 1.56, 0); g.add(snout);
-  const earGeo = new THREE.SphereGeometry(0.22, 24, 18);
-  for (const z of [-0.42, 0.42]) { const ear = new THREE.Mesh(earGeo, fur); ear.scale.set(0.8, 1.1, 0.65); ear.position.set(1.34, 2.2, z); g.add(ear); }
-  for (const [x, y, z] of [[-0.85,0.68,-0.46],[-0.85,0.68,0.46],[0.95,0.68,-0.46],[0.95,0.68,0.46]]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,1.2,20), fur); leg.position.set(x,y,z); g.add(leg); }
-  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.15,2.2,18), fur); tail.rotation.z = -Math.PI/3.1; tail.position.set(-2,1.35,0); g.add(tail);
-  for (let i=-2;i<=2;i++) { const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.95,1.65), dark); stripe.position.set(i*.42,1.35,0); stripe.rotation.z=i*.08; g.add(stripe); }
-  return g;
-}
-
-function makeFallbackLion() {
-  const g = new THREE.Group();
-  const fur = new THREE.MeshStandardMaterial({ color: 0xb97b34, roughness: 0.9 });
-  const maneMat = new THREE.MeshStandardMaterial({ color: 0x553019, roughness: 1 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 48, 32), fur); body.scale.set(1.65,0.86,0.86); body.position.y=1.25; g.add(body);
-  const mane = new THREE.Mesh(new THREE.SphereGeometry(0.88,40,28), maneMat); mane.scale.set(0.82,1.05,1.05); mane.position.set(1.34,1.7,0); g.add(mane);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.68,40,28), fur); head.position.set(1.42,1.7,0); g.add(head);
-  for (const x of [-0.75,0.95]) for (const z of [-0.45,0.45]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.22,1.25,20), fur); leg.position.set(x,0.68,z); g.add(leg); }
-  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.15,2.1,18), fur); tail.rotation.z=-Math.PI/3; tail.position.set(-2,1.35,0); g.add(tail);
-  return g;
 }
 
 function prepareModel(model) {
+  if (model.userData.__prepared) return;
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3()).length();
   if (size > 0) model.scale.multiplyScalar(4.2 / size);
@@ -131,7 +139,20 @@ function prepareModel(model) {
   model.position.x -= center.x;
   model.position.z -= center.z;
   model.position.y -= scaledBox.min.y;
-  model.traverse((obj) => { if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; } });
+  model.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      if (obj.material) {
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+        materials.forEach((material) => {
+          material.needsUpdate = true;
+          if ('color' in material) material.color.convertSRGBToLinear?.();
+        });
+      }
+    }
+  });
+  model.userData.__prepared = true;
 }
 
 function setupClips(gltf) {
@@ -148,8 +169,6 @@ function setupClips(gltf) {
 
 function playMode(mode) {
   if (!current) return;
-  actionMode = mode;
-  actionClock = 0;
   document.querySelectorAll('.action').forEach((button) => button.classList.toggle('active', button.dataset.action === mode));
   if (mixer) {
     Object.values(mixer._map || {}).forEach((action) => action.stop());
@@ -157,11 +176,11 @@ function playMode(mode) {
     if (target) {
       target.reset().fadeIn(0.25).play();
       target.setLoop(mode === 'roar' ? THREE.LoopOnce : THREE.LoopRepeat, mode === 'roar' ? 1 : Infinity);
-      $('#actionHint').textContent = mixer._map?.[mode] ? `原生 GLB 动作：${target.getClip().name}` : '当前 GLB 没有该动作，正在使用可用动作近似。';
+      $('#actionHint').textContent = mixer._map?.[mode] ? `原生 GLB 动作：${target.getClip().name}` : '当前 GLB 没有该动作，使用可用动作近似。';
       return;
     }
   }
-  $('#actionHint').textContent = `当前模型没有骨骼动作，使用轻量展示动画模拟 ${mode.toUpperCase()}。`;
+  $('#actionHint').textContent = `当前模型没有骨骼动作：${mode.toUpperCase()} 仅保留展示状态。`;
 }
 
 function attachCached(kind, entry) {
@@ -170,35 +189,113 @@ function attachCached(kind, entry) {
   prepareModel(current);
   scene.add(current);
   setupClips(entry.gltf);
-  $('#modelStatus').textContent = entry.ok ? `${data[kind].name} 已就绪` : `${data[kind].name} / 备用展示`;
+  $('#modelStatus').textContent = `${data[kind].name} ${entry.urlIndex > 0 ? '备用真实 GLB' : '已就绪'}`;
   playMode('idle');
 }
 
-async function preloadAnimal(kind) {
-  if (cache.has(kind)) return cache.get(kind);
-  try {
-    const gltf = await loader.loadAsync(data[kind].url);
-    const entry = { gltf, ok: true };
-    cache.set(kind, entry);
-    return entry;
-  } catch (error) {
-    console.error(`GLB preload failed: ${kind}`, error);
-    const fallback = kind === 'tiger' ? makeFallbackTiger() : makeFallbackLion();
-    const entry = { gltf: { scene: fallback, animations: [] }, ok: false };
-    cache.set(kind, entry);
-    return entry;
+async function fetchWithProgress(kind, url) {
+  const state = loadState[kind];
+  state.phase = 'downloading';
+  state.loaded = 0;
+  state.total = 0;
+  state.bytesKnown = false;
+  setLoadingUI(`正在下载 ${data[kind].name}`, `${data[kind].name}：读取真实 GLB 文件…`);
+  refreshProgress();
+
+  const response = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const total = Number(response.headers.get('content-length')) || 0;
+  state.total = total;
+  state.bytesKnown = total > 0;
+
+  if (!response.body) {
+    const buffer = await response.arrayBuffer();
+    state.loaded = buffer.byteLength;
+    if (!state.total) { state.total = state.loaded; state.bytesKnown = true; }
+    refreshProgress();
+    return buffer;
   }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    state.loaded += value.byteLength;
+    if (!state.total && state.loaded > 0) {
+      $('#progressSize').textContent = `${formatMB(state.loaded)} / 未知`;
+    }
+    refreshProgress();
+  }
+
+  const buffer = new ArrayBuffer(state.loaded);
+  const target = new Uint8Array(buffer);
+  let offset = 0;
+  for (const chunk of chunks) { target.set(chunk, offset); offset += chunk.byteLength; }
+  if (!state.total) { state.total = state.loaded; state.bytesKnown = true; }
+  refreshProgress();
+  return buffer;
+}
+
+function parseGLB(kind, arrayBuffer, basePath = '') {
+  return new Promise((resolve, reject) => {
+    loadState[kind].phase = 'parsing';
+    setLoadingUI(`正在解析 ${data[kind].name}`, `${data[kind].name}：GLB 下载完成，正在建立网格、材质与骨骼…`);
+    refreshProgress();
+    loader.parse(arrayBuffer, basePath, (gltf) => resolve(gltf), reject);
+  });
+}
+
+async function loadRealAnimal(kind) {
+  if (cache.has(kind)) return cache.get(kind);
+  let lastError = null;
+  for (let i = 0; i < data[kind].urls.length; i += 1) {
+    try {
+      const url = data[kind].urls[i];
+      const arrayBuffer = await fetchWithProgress(kind, url);
+      const gltf = await parseGLB(kind, arrayBuffer, url.substring(0, url.lastIndexOf('/') + 1));
+      const entry = { gltf, ok: true, urlIndex: i };
+      cache.set(kind, entry);
+      loadState[kind].phase = 'done';
+      refreshProgress();
+      return entry;
+    } catch (error) {
+      lastError = error;
+      console.error(`${kind} real GLB failed`, error);
+      if (i + 1 < data[kind].urls.length) {
+        setLoadingUI(`${data[kind].name} 切换备用源`, '主模型源读取失败，正在切换备用真实 GLB…');
+      }
+    }
+  }
+  loadState[kind].phase = 'done';
+  refreshProgress();
+  throw lastError || new Error(`${kind} model load failed`);
 }
 
 async function preloadAll() {
-  $('#modelStatus').textContent = '预加载狮子 + 老虎…';
-  $('#actionHint').textContent = '正在同时下载并解析两个 3D 模型，完成后进入展馆。';
-  const [lion, tiger] = await Promise.all([preloadAnimal('lion'), preloadAnimal('tiger')]);
-  const realReady = Number(lion.ok) + Number(tiger.ok);
-  $('#loading').querySelector('span').textContent = realReady === 2 ? '狮子与老虎已准备完成' : `已准备 ${realReady}/2 个真实 GLB，备用模型已就绪`;
-  setInfo('lion');
-  attachCached('lion', lion);
-  $('#loading').classList.add('hide');
+  $('#modelStatus').textContent = '正在加载真实模型';
+  try {
+    setLoadingUI('正在启动 3D 展馆', '两个模型同时下载，进度按真实字节数计算。');
+    const [lion, tiger] = await Promise.all([
+      loadRealAnimal('lion').catch((error) => ({ error, ok: false })),
+      loadRealAnimal('tiger').catch((error) => ({ error, ok: false }))
+    ]);
+
+    const errors = [lion, tiger].filter((item) => !item.ok);
+    if (errors.length) {
+      throw new Error(errors.map((item) => item.error?.message || '未知模型错误').join('；'));
+    }
+
+    setInfo('lion');
+    attachCached('lion', lion);
+    $('#loadingMessage').textContent = '两个真实 GLB 已加载完成，可立即切换。';
+    setTimeout(() => $('#loading').classList.add('hide'), 350);
+  } catch (error) {
+    console.error('3D model preload failed', error);
+    setLoadingUI('模型加载失败', `请刷新页面重试。${error.message || ''}`);
+    $('#modelStatus').textContent = '真实模型加载失败';
+  }
 }
 
 function setInfo(kind) {
@@ -217,7 +314,7 @@ function select(kind) {
   speechSynthesis.cancel();
   document.querySelectorAll('.animal').forEach((button) => button.classList.toggle('active', button.dataset.animal === kind));
   const cached = cache.get(kind);
-  if (cached) attachCached(kind, cached);
+  if (cached?.ok) attachCached(kind, cached);
 }
 
 function animate() {
