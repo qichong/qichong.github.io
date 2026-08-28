@@ -1,0 +1,39 @@
+name: Cache Google Tiger GLB
+
+on:
+  push:
+    paths:
+      - '.github/workflows/cache-google-tiger.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cache-tiger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Google Tiger GLB
+        run: |
+          mkdir -p animal-3d/models
+          curl -L --fail --retry 3 --connect-timeout 20 \
+            'https://storage.googleapis.com/ar-answers-in-search-models/static/Tiger/model.glb' \
+            -o animal-3d/models/tiger.glb
+          ls -lh animal-3d/models/tiger.glb
+
+      - name: Commit cached model
+        run: |
+          if git diff --quiet -- animal-3d/models/tiger.glb; then
+            echo 'Tiger GLB is already up to date.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add animal-3d/models/tiger.glb
+          git commit -m 'chore: cache Google Tiger GLB locally'
+          git push
