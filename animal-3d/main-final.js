@@ -91,13 +91,18 @@ async function fetchBuffer(kind) {
     const d = SPECIES[kind];
     const s = state[kind];
     s.phase = 'downloading';
-    setLoading(`正在读取 ${d.name}`, '模型已经放在 GitHub Pages 同域目录，不再跨域请求。');
+    if (!$('#loading').classList.contains('hide')) {
+      setLoading(`正在读取 ${d.name}`, '模型已经放在 GitHub Pages 同域目录，不再跨域请求。');
+    }
     updateProgress();
 
     const res = await fetch(d.url, { cache: 'force-cache' });
     if (!res.ok) throw new Error(`${d.name} HTTP ${res.status}`);
 
-    s.total = Number(res.headers.get('content-length')) || 0;
+    const encoding = res.headers.get('content-encoding');
+    const declaredTotal = Number(res.headers.get('content-length')) || 0;
+    s.total = encoding ? 0 : declaredTotal;
+
     if (!res.body) {
       const buffer = await res.arrayBuffer();
       s.loaded = buffer.byteLength;
@@ -138,7 +143,9 @@ async function load(kind) {
   if (cache.has(kind)) return cache.get(kind);
   const buffer = await fetchBuffer(kind);
   state[kind].phase = 'parsing';
-  setLoading(`正在解析 ${SPECIES[kind].name}`, '正在创建网格、材质、骨骼和动画。');
+  if (!$('#loading').classList.contains('hide')) {
+    setLoading(`正在解析 ${SPECIES[kind].name}`, '正在创建网格、材质、骨骼和动画。');
+  }
   const gltf = await new Promise((resolve, reject) => loader.parse(buffer, './', resolve, reject));
   cache.set(kind, gltf);
   state[kind].phase = 'done';
@@ -177,6 +184,7 @@ function makeActions(gltf, kind) {
   mixer = new THREE.AnimationMixer(gltf.scene);
   const result = {};
 
+  // Gobkit's animal GLBs use one 120-frame clip: Idle / Attack / Dead / Walk.
   if (kind !== 'lion' && kind !== 'tiger' && gltf.animations[0]) {
     const whole = gltf.animations[0];
     const ranges = { idle: [0, 30], roar: [30, 60], dead: [60, 90], walk: [90, 120] };
@@ -192,6 +200,7 @@ function makeActions(gltf, kind) {
     if (!result.idle && /idle|stand|rest|breath|wait/i.test(n)) result.idle = mixer.clipAction(clip);
     if (!result.walk && /walk|walking|stroll|run|running|locomotion|move/i.test(n)) result.walk = mixer.clipAction(clip);
     if (!result.roar && /roar|growl|attack|call|cry|bite/i.test(n)) result.roar = mixer.clipAction(clip);
+    if (!result.dead && /dead|death|die/i.test(n)) result.dead = mixer.clipAction(clip);
   }
   if (!result.idle && gltf.animations[0]) result.idle = mixer.clipAction(gltf.animations[0]);
   return result;
@@ -270,14 +279,43 @@ setup();
 info(active);
 
 (async () => {
-  const preloads = ['lion', 'tiger', 'rhino', 'shark'];
-  setLoading('正在准备动物馆', '首批 4 个模型从本地 GitHub Pages 目录读取；其余模型点击后按需加载。');
-  const results = await Promise.allSettled(preloads.map(kind => load(kind)));
-  const firstReady = results.findIndex(x => x.status === 'fulfilled');
-  if (firstReady >= 0) await show(preloads[firstReady], results[firstReady].value);
-  const ready = results.filter(x => x.status === 'fulfilled').length;
-  $('#loadingMessage').textContent = `首批模型 ${ready}/${preloads.length} 个已就绪。其余动物全部保存在本项目 models/ 目录，点击后按需加载。`;
+  // 首屏只等待前三个：狮子、老虎、鮟鱇鱼。
+  // 三个全部完成后立即打开页面；剩余模型在后台低并发预加载。
+  const firstThree = ['lion', 'tiger', 'anglerfish'];
+  setLoading('正在准备动物馆', '首屏等待前 3 个动物模型加载完成，其他模型随后在后台继续加载。');
+
+  const firstResults = await Promise.allSettled(firstThree.map(kind => load(kind)));
+  const readyKinds = firstThree.filter((kind, index) => firstResults[index].status === 'fulfilled');
+
+  if (readyKinds.length) {
+    const firstKind = readyKinds.includes('lion') ? 'lion' : readyKinds[0];
+    const firstIndex = firstThree.indexOf(firstKind);
+    await show(firstKind, firstResults[firstIndex].value);
+  }
+
+  const failed = firstThree.length - readyKinds.length;
+  $('#loadingMessage').textContent = failed
+    ? `首屏模型 ${readyKinds.length}/3 个加载成功，其余模型继续后台加载。`
+    : '首屏前 3 个模型已加载完成，其余模型正在后台加载。';
   $('#progressFill').style.width = '100%';
   $('#progressPercent').textContent = '100%';
-  setTimeout(() => $('#loading').classList.add('hide'), 500);
+  setTimeout(() => $('#loading').classList.add('hide'), 350);
+
+  // 后台一次只跑 2 个，避免 20+ 个 GLB 同时抢网络和内存。
+  const rest = ANIMALS.map(x => x.id).filter(id => !firstThree.includes(id));
+  const worker = async () => {
+    while (rest.length) {
+      const kind = rest.shift();
+      try {
+        await load(kind);
+        if (state[kind].phase === 'done') {
+          $('#modelStatus').textContent = `${SPECIES[kind].name} · 已后台缓存`;
+        }
+      } catch (error) {
+        state[kind].phase = 'error';
+        console.warn(`${kind} background preload failed`, error);
+      }
+    }
+  };
+  await Promise.all([worker(), worker()]);
 })();
