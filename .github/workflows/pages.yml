@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ !contains(github.event.head_commit.message, '[animal-realistic-sync]') }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -24,15 +25,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Google Tiger GLB
+      - name: Verify local animal assets
+        shell: bash
         run: |
-          set -e
-          mkdir -p animal-3d/models
-          curl -L --fail --retry 3 --retry-delay 2 \
-            'https://storage.googleapis.com/ar-answers-in-search-models/static/Tiger/model.glb' \
-            -o animal-3d/models/tiger.glb
+          set -euo pipefail
+          test -s animal-3d/models/lion.glb
           test -s animal-3d/models/tiger.glb
-          echo "Tiger GLB size: $(du -h animal-3d/models/tiger.glb | cut -f1)"
+          test -s animal-3d/models/fox.glb
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
