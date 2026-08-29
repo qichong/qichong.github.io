@@ -44,14 +44,10 @@ function setup() {
   rim.position.set(-5, 3, -4);
   scene.add(rim);
 
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(7, 64),
-    new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 })
-  );
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(7, 64), new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
-
   const grid = new THREE.GridHelper(12, 24, 0x342b1e, 0x161616);
   grid.position.y = 0.01;
   scene.add(grid);
@@ -70,8 +66,7 @@ function setLoading(title, detail) {
 }
 
 function renderAnimalButtons() {
-  const box = $('.animals');
-  box.innerHTML = ANIMALS.map((d) =>
+  $('.animals').innerHTML = ANIMALS.map((d) =>
     `<button class="animal${d.id === active ? ' active' : ''}" data-animal="${d.id}"><span>${d.no}</span> ${d.emoji} ${d.name}</button>`
   ).join('');
 }
@@ -93,9 +88,7 @@ function updateProgress() {
   const pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
   $('#progressFill').style.width = `${pct}%`;
   $('#progressPercent').textContent = `${pct}%`;
-  $('#progressSize').textContent = total
-    ? `${(loaded / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(1)} MB`
-    : '本地 GLB';
+  $('#progressSize').textContent = total ? `${(loaded / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(1)} MB` : '本地 GLB';
 }
 
 async function fetchBuffer(kind) {
@@ -111,7 +104,6 @@ async function fetchBuffer(kind) {
 
     const res = await fetch(d.url, { cache: 'force-cache' });
     if (!res.ok) throw new Error(`${d.name} HTTP ${res.status}`);
-
     const encoding = res.headers.get('content-encoding');
     const declaredTotal = Number(res.headers.get('content-length')) || 0;
     s.total = encoding ? 0 : declaredTotal;
@@ -136,8 +128,8 @@ async function fetchBuffer(kind) {
       if (!s.total) s.total = size;
       updateProgress();
     }
-
     s.total = size;
+
     const out = new Uint8Array(size);
     let offset = 0;
     for (const chunk of chunks) {
@@ -163,9 +155,7 @@ async function load(kind) {
   if (!$('#loading').classList.contains('hide')) {
     setLoading(`正在解析 ${SPECIES[kind].name}`, '正在创建网格、材质、骨骼和动画。');
   }
-  const gltf = await new Promise((resolve, reject) => {
-    loader.parse(buffer, './', resolve, reject);
-  });
+  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, './', resolve, reject));
   cache.set(kind, gltf);
   state[kind].phase = 'done';
   return gltf;
@@ -214,12 +204,7 @@ function makeActions(gltf) {
 }
 
 function renderActionButtons() {
-  const holder = $('#actions');
-  holder.innerHTML = `
-    <button class="action" data-action="idle">◌ Idle</button>
-    <button class="action" data-action="walk">↗ Walk / Run</button>
-    <button class="action" data-action="roar">◉ Attack / Call</button>
-    <button class="action" data-action="dead">✕ Dead</button>`;
+  $('#actions').innerHTML = '<button class="action" data-action="idle">◌ Idle</button><button class="action" data-action="walk">↗ Walk / Run</button><button class="action" data-action="roar">◉ Attack / Call</button><button class="action" data-action="dead">✕ Dead</button>';
 }
 
 function playAction(mode) {
@@ -302,22 +287,22 @@ renderActionButtons();
 info(active);
 
 (async () => {
-  // 首屏严格等待前三个：01 狮子、02 老虎、03 非洲象。
-  // 三个都准备好后立即打开页面；其它模型只在后台低并发缓存。
   const firstThree = ANIMALS.slice(0, 3).map((x) => x.id);
   setLoading('正在准备动物馆', '首屏只等待前 3 个真实模型，其他模型随后后台加载。');
 
   const firstResults = await Promise.allSettled(firstThree.map((kind) => load(kind)));
-  const ready = firstResults.filter((x) => x.status === 'fulfilled');
+  const readyCount = firstResults.filter((x) => x.status === 'fulfilled').length;
+  const lionReady = firstResults[0]?.status === 'fulfilled';
+  const firstReadyIndex = firstResults.findIndex((x) => x.status === 'fulfilled');
 
-  if (ready.length) {
-    const firstKind = ready[firstThree.indexOf('lion')] ? 'lion' : firstThree[firstResults.findIndex((x) => x.status === 'fulfilled')];
+  if (firstReadyIndex >= 0) {
+    const firstKind = lionReady ? 'lion' : firstThree[firstReadyIndex];
     await show(firstKind, firstResults[firstThree.indexOf(firstKind)].value);
   }
 
-  $('#loadingMessage').textContent = ready.length === 3
+  $('#loadingMessage').textContent = readyCount === 3
     ? '首屏前三个真实动物已经加载完成，其余模型正在后台加载。'
-    : `首屏模型 ${ready.length}/3 个加载成功，其余模型继续后台加载。`;
+    : `首屏模型 ${readyCount}/3 个加载成功，其余模型继续后台加载。`;
   setTimeout(() => $('#loading').classList.add('hide'), 300);
 
   const queue = ANIMALS.map((x) => x.id).filter((id) => !firstThree.includes(id));
