@@ -139,7 +139,29 @@ async function load(kind) {
   const buffer = await fetchBuffer(kind);
   state[kind].phase = 'parsing';
   if (!$('#loading').classList.contains('hide')) setLoading(`正在解析 ${SPECIES[kind].name}`, '正在解码网格、材质、骨骼和动画。');
-  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, '', resolve, reject));
+  const d = SPECIES[kind];
+  const modelUrl = new URL(d.url, location.href);
+  const resourcePath = new URL('.', modelUrl).href;
+  console.debug(`[animal-3d] ${d.name} resource path:`, resourcePath);
+  const gltf = await new Promise((resolve, reject) => {
+    loader.parse(buffer, resourcePath, (result) => resolve(result), (error) => {
+      console.error(`[animal-3d] ${d.name} parse/texture error`, error);
+      reject(error);
+    });
+  });
+  gltf.scene.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    materials.forEach((material) => {
+      if (!material) return;
+      if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
+      if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+      if (material.metalnessMap) material.metalnessMap.colorSpace = THREE.NoColorSpace;
+      if (material.roughnessMap) material.roughnessMap.colorSpace = THREE.NoColorSpace;
+      if (material.normalMap) material.normalMap.colorSpace = THREE.NoColorSpace;
+      if (material.aoMap) material.aoMap.colorSpace = THREE.NoColorSpace;
+    });
+  });
   cache.set(kind, gltf);
   state[kind].phase = 'done';
   return gltf;
