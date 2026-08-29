@@ -3,30 +3,64 @@
 独立的 GitHub Pages 动物科普页面：
 
 - Three.js 3D 场景
-- 🦁 狮子 / 🐯 孟加拉虎切换
-- GLB 模型加载
-- Idle / Walk / Roar 动作控制
+- 22 个动物 / 生物模型切换
+- 所有模型从 `animal-3d/models/` 同源加载，避免第三方模型跨域
+- GLB 模型加载与缓存
+- Idle / Walk / Attack / Dead 动作控制
 - 鼠标旋转与缩放
 - 浏览器中文语音讲解
 - 响应式布局
 
 访问：`/animal-3d/`
 
-## 模型说明
+## 当前模型
 
-狮子模型来自 `code4fukui/vr-cats`，该项目 README 标注原始模型为 kenchoo 的 Sketchfab 作品，许可证为 CC BY-NC-SA 4.0；项目文件中的 `lion.glb` 约 5.4 MB。
+当前页面包含 22 个模型：
 
-老虎现在使用 Google 搜索动物展示使用的孟加拉虎 GLB：
-`https://storage.googleapis.com/ar-answers-in-search-models/static/Tiger/model.glb`
+1. 非洲狮
+2. 孟加拉虎
+3. 鮟鱇鱼
+4. 蝙蝠
+5. 柯基犬
+6. 鸭子
+7. 河马
+8. 水母
+9. 鸭嘴兽
+10. 犀牛
+11. 鲨鱼
+12. 蜜蜂
+13. 野猪
+14. 河豚
+15. 山羊
+16. 旱獭
+17. 猫头鹰
+18. 老鼠
+19. 海豹
+20. 鲸
+21. Gobkit Red
+22. Gobkit Blue
 
-老虎这个 GLB 本身不保证包含与狮子完全一致的 Idle / Walk / Roar 骨骼动画，因此页面采用“原生 GLB 动画优先；缺失时使用轻量展示动画”的策略。后续如果找到授权明确、并同时包含多个完整猫科动作的 Tiger GLB，可以直接替换 URL，不需要改 Three.js 动画控制层。
+## 模型来源与授权
 
-## 动画控制
+新增的 20 个模型来自 Gobkit Free Animal Pack / Vol. 2。Gobkit 的免费资源清单标注这些动物包为 CC0 1.0，并使用统一的 rigged 动画：Idle / Attack / Dead / Walk，动画帧率为 24 FPS。
 
-页面会优先按名称匹配 GLB 中的动画 clip：
+Lion 使用项目原有的 `code4fukui/vr-cats` 模型，原始许可证为 CC BY-NC-SA 4.0；对应说明保存在 `models/ATTRIBUTIONS.md`。
 
-- `Idle` / `Stand` / `Rest` / `Breath`
-- `Walk` / `Walking` / `Stroll` / `Run`
-- `Roar` / `Growl` / `Attack` / `Call`
+Tiger 保留项目现有模型。
 
-如果某个动作不存在，会自动使用该模型的可用动作或轻量程序化展示，避免按钮失效。
+详细来源、下载地址及授权记录见：`animal-3d/models/ATTRIBUTIONS.md`。
+
+## 动画实现
+
+Gobkit 的部分 GLB 把多个动作放在同一个 animation clip 中，因此页面会按统一帧区间切片：
+
+- 0–29：Idle
+- 30–59：Attack
+- 60–89：Dead
+- 90–119：Walk
+
+Lion / Tiger 则优先根据原始动画 clip 名称匹配 Idle / Walk / Attack 等动作。
+
+## 下载方式
+
+仓库包含 `.github/workflows/animal-3d-assets.yml`。更新资源清单或手动执行 Workflow 时，它会把外部模型下载到 `animal-3d/models/` 并提交回仓库。页面运行时只读取同源本地 GLB。
