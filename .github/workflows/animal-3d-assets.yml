@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download 20 CC0 animal GLBs
+      - name: Download local animal GLBs
         shell: bash
         run: |
           set -euo pipefail
@@ -34,6 +34,7 @@ jobs:
             test -s "animal-3d/models/$out"
           }
 
+          # 20 CC0 Gobkit models
           download 'https://gobkit.com/freebies/animal/Anglerfish.glb' 'anglerfish.glb'
           download 'https://gobkit.com/freebies/animal/Bat.glb' 'bat.glb'
           download 'https://gobkit.com/freebies/animal/Corgi.glb' 'corgi.glb'
@@ -55,17 +56,26 @@ jobs:
           download 'https://gobkit.com/freebies/animalB/Seal.glb' 'seal.glb'
           download 'https://gobkit.com/freebies/animalB/Whale.glb' 'whale.glb'
 
+          # Existing lion is also copied locally so the page has no external model request.
+          download 'https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb' 'lion.glb'
+
       - name: Record asset source and license
         shell: bash
         run: |
           cat > animal-3d/models/ATTRIBUTIONS.md <<'EOF'
           # Animal model sources
 
+          ## Gobkit
           The 20 added animal models are from Gobkit Free Animal Pack / Vol. 2.
           Source manifest: https://gobkit.com/api/free
-          License: CC0 1.0 (public domain), free for personal and commercial use; attribution is not required.
+          License: CC0 1.0; free for personal and commercial use; attribution is not required.
 
           Models: Anglerfish, Bat, Corgi, Duck, Hippo, Jellyfish, Platypus, Rhino, Shark, Red, Bee, Blue, Boar, Fugu, Goat, Marmot, Owl, Rat, Seal, Whale.
+
+          ## Lion
+          `lion.glb` is the existing lion source from `code4fukui/vr-cats`.
+          Source: https://github.com/code4fukui/vr-cats
+          Original license: CC BY-NC-SA 4.0. Keep this notice with the model.
           EOF
 
       - name: Commit downloaded assets
@@ -79,5 +89,5 @@ jobs:
             echo 'No asset changes.'
             exit 0
           fi
-          git commit -m 'animal-3d: download 20 local CC0 animal GLBs [animal-assets]'
+          git commit -m 'animal-3d: download local animal GLBs [animal-assets]'
           git push
