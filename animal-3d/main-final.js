@@ -1,13 +1,13 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
-import { ANIMALS } from './animal-manifest.js';
+import { ANIMALS } from './animal-manifest-realistic.js';
 
 const $ = (s) => document.querySelector(s);
-const SPECIES = Object.fromEntries(ANIMALS.map(x => [x.id, x]));
+const SPECIES = Object.fromEntries(ANIMALS.map((x) => [x.id, x]));
 const cache = new Map();
 const pending = new Map();
-const state = Object.fromEntries(ANIMALS.map(x => [x.id, { loaded: 0, total: 0, phase: 'waiting' }]));
+const state = Object.fromEntries(ANIMALS.map((x) => [x.id, { loaded: 0, total: 0, phase: 'waiting' }]));
 const loader = new GLTFLoader();
 
 let scene, camera, renderer, controls;
@@ -44,10 +44,14 @@ function setup() {
   rim.position.set(-5, 3, -4);
   scene.add(rim);
 
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(7, 64), new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 }));
+  const ground = new THREE.Mesh(
+    new THREE.CircleGeometry(7, 64),
+    new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 })
+  );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
+
   const grid = new THREE.GridHelper(12, 24, 0x342b1e, 0x161616);
   grid.position.y = 0.01;
   scene.add(grid);
@@ -65,12 +69,19 @@ function setLoading(title, detail) {
   $('#loadingMessage').textContent = detail;
 }
 
+function renderAnimalButtons() {
+  const box = $('.animals');
+  box.innerHTML = ANIMALS.map((d) =>
+    `<button class="animal${d.id === active ? ' active' : ''}" data-animal="${d.id}"><span>${d.no}</span> ${d.emoji} ${d.name}</button>`
+  ).join('');
+}
+
 function info(kind) {
   const d = SPECIES[kind];
   $('#animalNo').textContent = d.no;
   $('#name').textContent = d.name;
   $('#latin').textContent = d.latin;
-  $('#tagline').textContent = d.tagline;
+  $('#tagline').textContent = `${d.category} · ${d.facts?.[0]?.[1] || ''}`;
   $('#facts').innerHTML = d.facts.map(([a, b]) => `<div class="fact"><b>${a}</b><span>${b}</span></div>`).join('');
   $('#desc').textContent = d.desc;
 }
@@ -79,10 +90,12 @@ function updateProgress() {
   const entries = Object.values(state);
   const total = entries.reduce((n, s) => n + (s.total || 0), 0);
   const loaded = entries.reduce((n, s) => n + Math.min(s.loaded, s.total || s.loaded), 0);
-  const pct = total ? Math.round(loaded / total * 100) : 0;
+  const pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
   $('#progressFill').style.width = `${pct}%`;
   $('#progressPercent').textContent = `${pct}%`;
-  $('#progressSize').textContent = total ? `${(loaded / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(1)} MB` : '本地 GLB';
+  $('#progressSize').textContent = total
+    ? `${(loaded / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(1)} MB`
+    : '本地 GLB';
 }
 
 async function fetchBuffer(kind) {
@@ -136,7 +149,11 @@ async function fetchBuffer(kind) {
     return out.buffer;
   })();
   pending.set(kind, p);
-  try { return await p; } finally { pending.delete(kind); }
+  try {
+    return await p;
+  } finally {
+    pending.delete(kind);
+  }
 }
 
 async function load(kind) {
@@ -146,7 +163,9 @@ async function load(kind) {
   if (!$('#loading').classList.contains('hide')) {
     setLoading(`正在解析 ${SPECIES[kind].name}`, '正在创建网格、材质、骨骼和动画。');
   }
-  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, './', resolve, reject));
+  const gltf = await new Promise((resolve, reject) => {
+    loader.parse(buffer, './', resolve, reject);
+  });
   cache.set(kind, gltf);
   state[kind].phase = 'done';
   return gltf;
@@ -161,7 +180,7 @@ function prepare(model, kind) {
   const fitted = new THREE.Box3().setFromObject(model);
   const center = fitted.getCenter(new THREE.Vector3());
   model.position.set(-center.x, -fitted.min.y, -center.z);
-  model.traverse(o => {
+  model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
     o.receiveShadow = true;
@@ -179,57 +198,56 @@ function removeCurrent() {
   currentActions = {};
 }
 
-function makeActions(gltf, kind) {
+function makeActions(gltf) {
   if (!gltf.animations?.length) return {};
   mixer = new THREE.AnimationMixer(gltf.scene);
   const result = {};
-
-  // Gobkit's animal GLBs use one 120-frame clip: Idle / Attack / Dead / Walk.
-  if (kind !== 'lion' && kind !== 'tiger' && gltf.animations[0]) {
-    const whole = gltf.animations[0];
-    const ranges = { idle: [0, 30], roar: [30, 60], dead: [60, 90], walk: [90, 120] };
-    for (const [name, [from, to]] of Object.entries(ranges)) {
-      const clip = THREE.AnimationUtils.subclip(whole, `${kind}-${name}`, from, to, 24);
-      if (clip.duration > 0) result[name] = mixer.clipAction(clip);
-    }
-    return result;
-  }
-
   for (const clip of gltf.animations) {
     const n = clip.name || '';
-    if (!result.idle && /idle|stand|rest|breath|wait/i.test(n)) result.idle = mixer.clipAction(clip);
+    if (!result.idle && /idle|stand|survey|rest|breath|wait/i.test(n)) result.idle = mixer.clipAction(clip);
     if (!result.walk && /walk|walking|stroll|run|running|locomotion|move/i.test(n)) result.walk = mixer.clipAction(clip);
     if (!result.roar && /roar|growl|attack|call|cry|bite/i.test(n)) result.roar = mixer.clipAction(clip);
     if (!result.dead && /dead|death|die/i.test(n)) result.dead = mixer.clipAction(clip);
   }
-  if (!result.idle && gltf.animations[0]) result.idle = mixer.clipAction(gltf.animations[0]);
+  if (!result.idle) result.idle = mixer.clipAction(gltf.animations[0]);
   return result;
 }
 
+function renderActionButtons() {
+  const holder = $('#actions');
+  holder.innerHTML = `
+    <button class="action" data-action="idle">◌ Idle</button>
+    <button class="action" data-action="walk">↗ Walk / Run</button>
+    <button class="action" data-action="roar">◉ Attack / Call</button>
+    <button class="action" data-action="dead">✕ Dead</button>`;
+}
+
 function playAction(mode) {
-  document.querySelectorAll('.action').forEach(b => b.classList.toggle('active', b.dataset.action === mode));
+  document.querySelectorAll('.action').forEach((b) => b.classList.toggle('active', b.dataset.action === mode));
   const action = currentActions[mode] || currentActions.idle;
+  const hasExact = Boolean(currentActions[mode]);
   if (!action) {
     $('#actionHint').textContent = '当前模型没有骨骼动作。';
     return;
   }
-  Object.values(currentActions).forEach(a => a.stop());
+  Object.values(currentActions).forEach((a) => a.stop());
   action.reset().fadeIn(0.18).play();
   const once = mode === 'roar' || mode === 'dead';
   action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
-  if (once) action.clampWhenFinished = true;
-  $('#actionHint').textContent = `${SPECIES[active].name}：${mode === 'roar' ? 'Attack' : mode}`;
+  action.clampWhenFinished = once;
+  $('#actionHint').textContent = hasExact ? `${SPECIES[active].name}：${action.getClip().name}` : `${SPECIES[active].name}：使用可用动作`;
 }
 
 async function show(kind, gltf) {
   active = kind;
   info(kind);
-  document.querySelectorAll('.animal').forEach(b => b.classList.toggle('active', b.dataset.animal === kind));
+  renderAnimalButtons();
+  renderActionButtons();
   removeCurrent();
   current = gltf.scene;
   prepare(current, kind);
   scene.add(current);
-  currentActions = makeActions(gltf, kind);
+  currentActions = makeActions(gltf);
   $('#modelStatus').textContent = `${SPECIES[kind].name} · 本地 GLB 已就绪`;
   playAction('idle');
 }
@@ -237,6 +255,7 @@ async function show(kind, gltf) {
 async function select(kind) {
   active = kind;
   info(kind);
+  renderAnimalButtons();
   try {
     const gltf = await load(kind);
     await show(kind, gltf);
@@ -258,14 +277,16 @@ function animate() {
   renderer?.render(scene, camera);
 }
 
-$('.animals').addEventListener('click', e => {
+$('.animals').addEventListener('click', (e) => {
   const b = e.target.closest('.animal');
   if (b) select(b.dataset.animal);
 });
-$('#actions').addEventListener('click', e => {
+
+$('#actions').addEventListener('click', (e) => {
   const b = e.target.closest('.action');
   if (b) playAction(b.dataset.action);
 });
+
 $('#voiceBtn').addEventListener('click', () => {
   const d = SPECIES[active];
   speechSynthesis.cancel();
@@ -276,41 +297,35 @@ $('#voiceBtn').addEventListener('click', () => {
 });
 
 setup();
+renderAnimalButtons();
+renderActionButtons();
 info(active);
 
 (async () => {
-  // 首屏只等待前三个：狮子、老虎、鮟鱇鱼。
-  // 三个全部完成后立即打开页面；剩余模型在后台低并发预加载。
-  const firstThree = ['lion', 'tiger', 'anglerfish'];
-  setLoading('正在准备动物馆', '首屏等待前 3 个动物模型加载完成，其他模型随后在后台继续加载。');
+  // 首屏严格等待前三个：01 狮子、02 老虎、03 非洲象。
+  // 三个都准备好后立即打开页面；其它模型只在后台低并发缓存。
+  const firstThree = ANIMALS.slice(0, 3).map((x) => x.id);
+  setLoading('正在准备动物馆', '首屏只等待前 3 个真实模型，其他模型随后后台加载。');
 
-  const firstResults = await Promise.allSettled(firstThree.map(kind => load(kind)));
-  const readyKinds = firstThree.filter((kind, index) => firstResults[index].status === 'fulfilled');
+  const firstResults = await Promise.allSettled(firstThree.map((kind) => load(kind)));
+  const ready = firstResults.filter((x) => x.status === 'fulfilled');
 
-  if (readyKinds.length) {
-    const firstKind = readyKinds.includes('lion') ? 'lion' : readyKinds[0];
-    const firstIndex = firstThree.indexOf(firstKind);
-    await show(firstKind, firstResults[firstIndex].value);
+  if (ready.length) {
+    const firstKind = ready[firstThree.indexOf('lion')] ? 'lion' : firstThree[firstResults.findIndex((x) => x.status === 'fulfilled')];
+    await show(firstKind, firstResults[firstThree.indexOf(firstKind)].value);
   }
 
-  const failed = firstThree.length - readyKinds.length;
-  $('#loadingMessage').textContent = failed
-    ? `首屏模型 ${readyKinds.length}/3 个加载成功，其余模型继续后台加载。`
-    : '首屏前 3 个模型已加载完成，其余模型正在后台加载。';
-  $('#progressFill').style.width = '100%';
-  $('#progressPercent').textContent = '100%';
-  setTimeout(() => $('#loading').classList.add('hide'), 350);
+  $('#loadingMessage').textContent = ready.length === 3
+    ? '首屏前三个真实动物已经加载完成，其余模型正在后台加载。'
+    : `首屏模型 ${ready.length}/3 个加载成功，其余模型继续后台加载。`;
+  setTimeout(() => $('#loading').classList.add('hide'), 300);
 
-  // 后台一次只跑 2 个，避免 20+ 个 GLB 同时抢网络和内存。
-  const rest = ANIMALS.map(x => x.id).filter(id => !firstThree.includes(id));
+  const queue = ANIMALS.map((x) => x.id).filter((id) => !firstThree.includes(id));
   const worker = async () => {
-    while (rest.length) {
-      const kind = rest.shift();
+    while (queue.length) {
+      const kind = queue.shift();
       try {
         await load(kind);
-        if (state[kind].phase === 'done') {
-          $('#modelStatus').textContent = `${SPECIES[kind].name} · 已后台缓存`;
-        }
       } catch (error) {
         state[kind].phase = 'error';
         console.warn(`${kind} background preload failed`, error);
