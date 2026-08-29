@@ -1,0 +1,83 @@
+name: Download Animal 3D Assets
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'animal-3d/**'
+      - '.github/workflows/animal-3d-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  download-animal-models:
+    if: ${{ !contains(github.event.head_commit.message, '[animal-assets]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download 20 CC0 animal GLBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p animal-3d/models
+          download() {
+            url="$1"
+            out="$2"
+            echo "Downloading $out"
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 180 "$url" -o "animal-3d/models/$out"
+            test -s "animal-3d/models/$out"
+          }
+
+          download 'https://gobkit.com/freebies/animal/Anglerfish.glb' 'anglerfish.glb'
+          download 'https://gobkit.com/freebies/animal/Bat.glb' 'bat.glb'
+          download 'https://gobkit.com/freebies/animal/Corgi.glb' 'corgi.glb'
+          download 'https://gobkit.com/freebies/animal/Duck.glb' 'duck.glb'
+          download 'https://gobkit.com/freebies/animal/Hippo.glb' 'hippo.glb'
+          download 'https://gobkit.com/freebies/animal/Jellyfish.glb' 'jellyfish.glb'
+          download 'https://gobkit.com/freebies/animal/Platypus.glb' 'platypus.glb'
+          download 'https://gobkit.com/freebies/animal/Rhino.glb' 'rhino.glb'
+          download 'https://gobkit.com/freebies/animal/Shark.glb' 'shark.glb'
+          download 'https://gobkit.com/freebies/animal/Red.glb' 'red.glb'
+          download 'https://gobkit.com/freebies/animalB/Bee.glb' 'bee.glb'
+          download 'https://gobkit.com/freebies/animalB/Blue.glb' 'blue.glb'
+          download 'https://gobkit.com/freebies/animalB/Boar.glb' 'boar.glb'
+          download 'https://gobkit.com/freebies/animalB/Fugu.glb' 'fugu.glb'
+          download 'https://gobkit.com/freebies/animalB/Goat.glb' 'goat.glb'
+          download 'https://gobkit.com/freebies/animalB/Marmot.glb' 'marmot.glb'
+          download 'https://gobkit.com/freebies/animalB/Owl.glb' 'owl.glb'
+          download 'https://gobkit.com/freebies/animalB/Rat.glb' 'rat.glb'
+          download 'https://gobkit.com/freebies/animalB/Seal.glb' 'seal.glb'
+          download 'https://gobkit.com/freebies/animalB/Whale.glb' 'whale.glb'
+
+      - name: Record asset source and license
+        shell: bash
+        run: |
+          cat > animal-3d/models/ATTRIBUTIONS.md <<'EOF'
+          # Animal model sources
+
+          The 20 added animal models are from Gobkit Free Animal Pack / Vol. 2.
+          Source manifest: https://gobkit.com/api/free
+          License: CC0 1.0 (public domain), free for personal and commercial use; attribution is not required.
+
+          Models: Anglerfish, Bat, Corgi, Duck, Hippo, Jellyfish, Platypus, Rhino, Shark, Red, Bee, Blue, Boar, Fugu, Goat, Marmot, Owl, Rat, Seal, Whale.
+          EOF
+
+      - name: Commit downloaded assets
+        shell: bash
+        run: |
+          set -e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add animal-3d/models
+          if git diff --cached --quiet; then
+            echo 'No asset changes.'
+            exit 0
+          fi
+          git commit -m 'animal-3d: download 20 local CC0 animal GLBs [animal-assets]'
+          git push
