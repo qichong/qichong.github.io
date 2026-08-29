@@ -1,177 +1,91 @@
-name: Download Animal 3D Assets
+name: Sync Animal 3D Assets
 
 on:
   push:
     branches: [master]
     paths:
-      - 'animal-3d/**'
+      - 'animal-3d/animal-manifest-realistic.js'
       - '.github/workflows/animal-3d-assets.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: animal-3d-assets
+  cancel-in-progress: false
+
 jobs:
-  download-animal-models:
+  sync:
     if: ${{ !contains(github.event.head_commit.message, '[animal-assets]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Replace low-poly models with realistic animal GLBs
+      - name: Verify catalog
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p animal-3d/models .animal-backup
+          grep -q 'CATALOG_VERSION: 3' animal-3d/animal-manifest-realistic.js
 
-          # Keep the existing Tiger while replacing the old low-poly set.
-          if [ -f animal-3d/models/tiger.glb ]; then
-            cp animal-3d/models/tiger.glb .animal-backup/tiger.glb
-          fi
-          find animal-3d/models -maxdepth 1 -type f -name '*.glb' -delete
-
+      - name: Download verified animal models
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p animal-3d/models
           download() {
             local url="$1"
             local out="$2"
             echo "Downloading $out"
-            curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 240 "$url" -o "animal-3d/models/$out"
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 "$url" -o "animal-3d/models/$out"
             test -s "animal-3d/models/$out"
             test "$(head -c 4 "animal-3d/models/$out")" = "glTF"
           }
 
-          # Stable public realistic assets from the open-water project.
+          test -s animal-3d/models/tiger.glb
+          find animal-3d/models -maxdepth 1 -type f -name '*.glb' ! -name 'tiger.glb' -delete
+
+          download 'https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb' 'lion.glb'
+          download 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb' 'fox.glb'
+          download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/shark.glb' 'shark.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/blue_whale_-_textured.glb' 'whale.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/flying_seagull.glb' 'seagull.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/scarlet_macaw.glb' 'macaw.glb'
-          download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/shark.glb' 'shark.glb'
-          download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/swordfish.glb' 'swordfish.glb'
-          download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/tuna.glb' 'tuna.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/asteroid_starfish_or_seastar.glb' 'starfish.glb'
+          download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/tuna.glb' 'tuna.glb'
+          download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/swordfish.glb' 'swordfish.glb'
 
-          # Official Khronos animated Fox sample.
-          download 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb' 'fox.glb'
+      - name: Write attribution metadata
+        shell: bash
+        run: |
+          cat > animal-3d/models/ATTRIBUTIONS.md <<'EOF'
+          # Animal 3D model sources
 
-          # Verified public Sloyd realistic / realistic-leaning GLB endpoints.
-          download 'https://storage.googleapis.com/ai-services-quality/jobs/or9arjbu.glb' 'elephant.glb'
-          download 'https://storage.googleapis.com/ai-services-quality/jobs/cprtjpcd.glb' 'wolf.glb'
-          download 'https://storage.googleapis.com/ai-services-quality/jobs/pqw5ic98.glb' 'lynx.glb'
-          download 'https://storage.googleapis.com/ai-services-quality/jobs/vsqb4ncm.glb' 'eagle.glb'
+          ## Existing project models
+          - `lion.glb`: https://github.com/code4fukui/vr-cats — CC BY-NC-SA 4.0.
+          - `tiger.glb`: existing project asset retained as-is.
 
-          # Restore the user's original Tiger.
-          cp .animal-backup/tiger.glb animal-3d/models/tiger.glb
-          download 'https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb' 'lion.glb'
+          ## Fixed-source models
+          - `fox.glb`: KhronosGroup/glTF-Sample-Assets Fox. PixelMannen model CC0 1.0; tomkranis rigging/animation CC BY 4.0; AsoboStudio/scurest conversion CC BY 4.0. Animations: Survey / Walk / Run.
+          - `shark.glb`: Open Water source model by Optic_idealist — CC BY 4.0.
+          - `whale.glb`: Open Water source model by Bohdan Lvov — CC BY 4.0.
+          - `seagull.glb`: Open Water source model by The lighthouse keeper / geminga — CC BY-SA 4.0.
+          - `macaw.glb`: Open Water source model by Mateus Schwaab — CC BY 4.0.
+          - `starfish.glb`: Open Water source model by Digital Atlas of Ancient Life — CC0 1.0.
+          - `tuna.glb`: Open Water source model by Quaternius — CC0 1.0.
+          - `swordfish.glb`: Open Water source model by Quaternius — CC0 1.0.
 
-          # Discover strong natural-animal candidates for the remaining slots from
-          # Sloyd's public CC BY 4.0 animal catalog. Models with fantasy/cartoon
-          # signals are explicitly rejected.
-          python3 <<'PY'
-          import html
-          import re
-          import urllib.request
-          from pathlib import Path
+          Open Water license details: https://github.com/bob6664569/open-water/blob/main/THIRD_PARTY_NOTICES.md
+          Khronos Fox source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox
+          EOF
 
-          OUT = Path('animal-3d/models')
-          BASE = 'https://www.sloyd.ai'
-          pages = [
-              '/free-3d-models/tag/quadruped',
-              '/free-3d-models/animals-creatures/birds',
-              '/free-3d-models/animals-creatures/sea-life',
-              '/free-3d-models/animals-creatures/reptiles',
-          ]
-          bad = re.compile(r'\b(spectral|ghost|alien|monster|demon|zombie|robot|cute|cartoon|stylized|low-poly|toy|statue|skull|fantasy|wyrm|dragon|wizard|druid)\b', re.I)
-          good = re.compile(r'\b(realistic|anatomically|detailed|photoreal|natural|wildlife)\b', re.I)
-          targets = {
-              'bear': ['bear'], 'deer': ['deer', 'doe', 'stag'], 'horse': ['horse'],
-              'giraffe': ['giraffe'], 'zebra': ['zebra'], 'rhino': ['rhino', 'rhinoceros'],
-              'hippo': ['hippo', 'hippopotamus'], 'moose': ['moose'], 'boar': ['boar', 'warthog'],
-              'owl': ['owl'], 'seal': ['seal'], 'crocodile': ['crocodile', 'alligator'],
-              'rabbit': ['rabbit', 'hare'],
-          }
-          target_score = {'bear':10,'deer':8,'horse':8,'giraffe':8,'zebra':8,'rhino':7,'hippo':6,'moose':7,'boar':5,'owl':5,'seal':4,'crocodile':3,'rabbit':2}
-
-          def get(url):
-              req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  return r.read().decode('utf-8', 'ignore')
-
-          candidates = []
-          for page in pages:
-              try:
-                  source = get(BASE + page)
-              except Exception as exc:
-                  print('WARN', page, exc)
-                  continue
-              for href, raw in re.findall(r'href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', source, re.I | re.S):
-                  title = html.unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', raw))).strip()
-                  if not title or bad.search(title):
-                      continue
-                  match = re.search(r'/free-3d-models/[^"?#]*?([a-z0-9]{8})/?$', href, re.I)
-                  if not match:
-                      continue
-                  job = match.group(1).lower()
-                  page_url = href if href.startswith('http') else BASE + href
-                  creator = title.rsplit(' by ', 1)[1].strip() if ' by ' in title else 'Sloyd creator'
-                  for key, words in targets.items():
-                      if any(re.search(r'\b' + re.escape(word) + r'\b', title, re.I) for word in words):
-                          score = target_score[key]
-                          if good.search(title): score += 100
-                          score += max(0, 20 - len(title) // 10)
-                          candidates.append((score, key, title, creator, page_url, job))
-
-          chosen = {}
-          for row in sorted(candidates, key=lambda x: (-x[0], x[2])):
-              if row[1] not in chosen:
-                  chosen[row[1]] = row
-
-          required = list(targets)
-          missing = [x for x in required if x not in chosen]
-          if missing:
-              raise SystemExit('No public realistic candidate found for: ' + ', '.join(missing))
-
-          attr = ['# Realistic animal model sources', '',
-                  'The previous low-poly Gobkit set has been replaced with realistic / realistic-leaning assets.', '',
-                  'Sloyd models: CC BY 4.0. Creator names and source pages are recorded below.',
-                  'Open Water sources: license information is recorded from the upstream project.',
-                  'Khronos Fox: see the official glTF Sample Assets README for its CC0 / CC BY 4.0 credits.', '',
-                  '## Sloyd models']
-          for key, title, creator, page_url, job in [chosen[k] for k in required]:
-              url = f'https://storage.googleapis.com/ai-services-quality/jobs/{job}.glb'
-              out = OUT / f'{key}.glb'
-              print('Downloading', key, title, url)
-              req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-              with urllib.request.urlopen(req, timeout=180) as r, out.open('wb') as f:
-                  f.write(r.read())
-              data = out.read_bytes()
-              if len(data) < 32 or data[:4] != b'glTF':
-                  raise SystemExit(f'Invalid GLB for {key}')
-              attr.append(f'- **{key}** — {title} — {creator} — {page_url} — CC BY 4.0')
-
-          attr += ['', '## Fixed-source models',
-              '- lion — code4fukui/vr-cats — CC BY-NC-SA 4.0 (retain original notice)',
-              '- tiger — existing project model',
-              '- elephant — Sloyd public model `or9arjbu` — CC BY 4.0',
-              '- wolf — Sloyd White Wolf `cprtjpcd` — CC BY 4.0',
-              '- lynx — Sloyd Lynx `pqw5ic98` — CC BY 4.0',
-              '- eagle — Sloyd Giant Eagle `vsqb4ncm` — CC BY 4.0',
-              '- fox — Khronos glTF Sample Assets Fox',
-              '- whale — open-water blue whale textured — CC BY 4.0',
-              '- seagull — open-water flying seagull — CC BY-SA 4.0',
-              '- macaw — open-water scarlet macaw — CC BY 4.0',
-              '- shark — open-water shark — CC BY 4.0',
-              '- swordfish — open-water swordfish — CC0 1.0',
-              '- tuna — open-water tuna — CC0 1.0',
-              '- starfish — open-water asteroid starfish / sea star — CC0 1.0']
-          (OUT / 'ATTRIBUTIONS.md').write_text('\n'.join(attr) + '\n', encoding='utf-8')
-          PY
-
-      - name: Commit realistic animal assets
+      - name: Commit and push without clobbering concurrent changes
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .animal-backup
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A animal-3d/models
@@ -179,5 +93,15 @@ jobs:
             echo 'No asset changes.'
             exit 0
           fi
-          git commit -m 'animal-3d: replace low-poly animals with realistic GLBs [animal-assets]'
-          git push
+          git commit -m 'animal-3d: sync verified realistic local models [animal-assets]'
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin master
+            if git rebase origin/master && git push origin HEAD:master; then
+              exit 0
+            fi
+            git rebase --abort || true
+            sleep 2
+          done
+
+          exit 1
