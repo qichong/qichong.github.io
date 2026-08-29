@@ -1,13 +1,18 @@
-# Animal model sources
+# Animal 3D model sources
 
-## Gobkit
-The 20 added animal models are from Gobkit Free Animal Pack / Vol. 2.
-Source manifest: https://gobkit.com/api/free
-License: CC0 1.0; free for personal and commercial use; attribution is not required.
+## Existing project models
+- `lion.glb`: https://github.com/code4fukui/vr-cats — CC BY-NC-SA 4.0.
+- `tiger.glb`: existing project asset retained as-is.
 
-Models: Anglerfish, Bat, Corgi, Duck, Hippo, Jellyfish, Platypus, Rhino, Shark, Red, Bee, Blue, Boar, Fugu, Goat, Marmot, Owl, Rat, Seal, Whale.
+## Fixed-source models
+- `fox.glb`: KhronosGroup/glTF-Sample-Assets Fox. PixelMannen model CC0 1.0; tomkranis rigging/animation CC BY 4.0; AsoboStudio/scurest conversion CC BY 4.0. Animations: Survey / Walk / Run.
+- `shark.glb`: Open Water source model by Optic_idealist — CC BY 4.0.
+- `whale.glb`: Open Water source model by Bohdan Lvov — CC BY 4.0.
+- `seagull.glb`: Open Water source model by The lighthouse keeper / geminga — CC BY-SA 4.0.
+- `macaw.glb`: Open Water source model by Mateus Schwaab — CC BY 4.0.
+- `starfish.glb`: Open Water source model by Digital Atlas of Ancient Life — CC0 1.0.
+- `tuna.glb`: Open Water source model by Quaternius — CC0 1.0.
+- `swordfish.glb`: Open Water source model by Quaternius — CC0 1.0.
 
-## Lion
-`lion.glb` is the existing lion source from `code4fukui/vr-cats`.
-Source: https://github.com/code4fukui/vr-cats
-Original license: CC BY-NC-SA 4.0. Keep this notice with the model.
+Open Water license details: https://github.com/bob6664569/open-water/blob/main/THIRD_PARTY_NOTICES.md
+Khronos Fox source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox
