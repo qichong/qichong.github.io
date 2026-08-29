@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/DRACOLoader.js';
 import { ANIMALS } from './animal-manifest-realistic.js';
 
 const $ = (s) => document.querySelector(s);
@@ -9,6 +10,9 @@ const cache = new Map();
 const pending = new Map();
 const state = Object.fromEntries(ANIMALS.map((x) => [x.id, { loaded: 0, total: 0, phase: 'waiting' }]));
 const loader = new GLTFLoader();
+const draco = new DRACOLoader();
+draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+loader.setDRACOLoader(draco);
 
 let scene, camera, renderer, controls;
 let current = null;
@@ -34,7 +38,6 @@ function setup() {
   controls.minDistance = 3.5;
   controls.maxDistance = 12;
   controls.target.set(0, 1.2, 0);
-
   scene.add(new THREE.HemisphereLight(0xfff5e2, 0x101820, 2.5));
   const key = new THREE.DirectionalLight(0xffd99c, 4);
   key.position.set(4, 7, 5);
@@ -43,7 +46,6 @@ function setup() {
   const rim = new THREE.DirectionalLight(0x5b9dff, 2);
   rim.position.set(-5, 3, -4);
   scene.add(rim);
-
   const ground = new THREE.Mesh(new THREE.CircleGeometry(7, 64), new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -51,7 +53,6 @@ function setup() {
   const grid = new THREE.GridHelper(12, 24, 0x342b1e, 0x161616);
   grid.position.y = 0.01;
   scene.add(grid);
-
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -66,9 +67,7 @@ function setLoading(title, detail) {
 }
 
 function renderAnimalButtons() {
-  $('.animals').innerHTML = ANIMALS.map((d) =>
-    `<button class="animal${d.id === active ? ' active' : ''}" data-animal="${d.id}"><span>${d.no}</span> ${d.emoji} ${d.name}</button>`
-  ).join('');
+  $('.animals').innerHTML = ANIMALS.map((d) => `<button class="animal${d.id === active ? ' active' : ''}" data-animal="${d.id}"><span>${d.no}</span> ${d.emoji} ${d.name}</button>`).join('');
 }
 
 function info(kind) {
@@ -97,17 +96,13 @@ async function fetchBuffer(kind) {
     const d = SPECIES[kind];
     const s = state[kind];
     s.phase = 'downloading';
-    if (!$('#loading').classList.contains('hide')) {
-      setLoading(`正在读取 ${d.name}`, '模型已经放在 GitHub Pages 同域目录，不再跨域请求。');
-    }
+    if (!$('#loading').classList.contains('hide')) setLoading(`正在读取 ${d.name}`, '模型位于 GitHub Pages 同域目录。');
     updateProgress();
-
     const res = await fetch(d.url, { cache: 'force-cache' });
     if (!res.ok) throw new Error(`${d.name} HTTP ${res.status}`);
     const encoding = res.headers.get('content-encoding');
     const declaredTotal = Number(res.headers.get('content-length')) || 0;
     s.total = encoding ? 0 : declaredTotal;
-
     if (!res.body) {
       const buffer = await res.arrayBuffer();
       s.loaded = buffer.byteLength;
@@ -115,7 +110,6 @@ async function fetchBuffer(kind) {
       updateProgress();
       return buffer;
     }
-
     const reader = res.body.getReader();
     const chunks = [];
     let size = 0;
@@ -129,33 +123,23 @@ async function fetchBuffer(kind) {
       updateProgress();
     }
     s.total = size;
-
     const out = new Uint8Array(size);
     let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
+    for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.byteLength; }
     s.loaded = size;
     updateProgress();
     return out.buffer;
   })();
   pending.set(kind, p);
-  try {
-    return await p;
-  } finally {
-    pending.delete(kind);
-  }
+  try { return await p; } finally { pending.delete(kind); }
 }
 
 async function load(kind) {
   if (cache.has(kind)) return cache.get(kind);
   const buffer = await fetchBuffer(kind);
   state[kind].phase = 'parsing';
-  if (!$('#loading').classList.contains('hide')) {
-    setLoading(`正在解析 ${SPECIES[kind].name}`, '正在创建网格、材质、骨骼和动画。');
-  }
-  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, './', resolve, reject));
+  if (!$('#loading').classList.contains('hide')) setLoading(`正在解析 ${SPECIES[kind].name}`, '正在解码网格、材质、骨骼和动画。');
+  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, '', resolve, reject));
   cache.set(kind, gltf);
   state[kind].phase = 'done';
   return gltf;
@@ -179,32 +163,21 @@ function prepare(model, kind) {
   model.userData.animalPrepared = true;
 }
 
-function removeCurrent() {
-  if (!current) return;
-  if (mixer) mixer.stopAllAction();
-  scene.remove(current);
-  current = null;
-  mixer = null;
-  currentActions = {};
-}
-
 function makeActions(gltf) {
-  if (!gltf.animations?.length) return {};
+  currentActions = {};
+  if (!gltf.animations?.length) return;
   mixer = new THREE.AnimationMixer(gltf.scene);
-  const result = {};
   for (const clip of gltf.animations) {
     const n = clip.name || '';
-    if (!result.idle && /idle|stand|survey|rest|breath|wait/i.test(n)) result.idle = mixer.clipAction(clip);
-    if (!result.walk && /walk|walking|stroll|run|running|locomotion|move/i.test(n)) result.walk = mixer.clipAction(clip);
-    if (!result.roar && /roar|growl|attack|call|cry|bite/i.test(n)) result.roar = mixer.clipAction(clip);
-    if (!result.dead && /dead|death|die/i.test(n)) result.dead = mixer.clipAction(clip);
+    if (!currentActions.idle && /idle|stand|survey|rest|breath|wait/i.test(n)) currentActions.idle = mixer.clipAction(clip);
+    if (!currentActions.walk && /walk|walking|stroll|run|running|locomotion|move/i.test(n)) currentActions.walk = mixer.clipAction(clip);
+    if (!currentActions.roar && /roar|growl|attack|call|cry|bite/i.test(n)) currentActions.roar = mixer.clipAction(clip);
   }
-  if (!result.idle) result.idle = mixer.clipAction(gltf.animations[0]);
-  return result;
+  if (!currentActions.idle) currentActions.idle = mixer.clipAction(gltf.animations[0]);
 }
 
 function renderActionButtons() {
-  $('#actions').innerHTML = '<button class="action" data-action="idle">◌ Idle</button><button class="action" data-action="walk">↗ Walk / Run</button><button class="action" data-action="roar">◉ Attack / Call</button><button class="action" data-action="dead">✕ Dead</button>';
+  $('#actions').innerHTML = '<button class="action" data-action="idle">◌ Idle</button><button class="action" data-action="walk">↗ Walk / Run</button><button class="action" data-action="roar">◉ Attack / Call</button>';
 }
 
 function playAction(mode) {
@@ -217,7 +190,7 @@ function playAction(mode) {
   }
   Object.values(currentActions).forEach((a) => a.stop());
   action.reset().fadeIn(0.18).play();
-  const once = mode === 'roar' || mode === 'dead';
+  const once = mode === 'roar';
   action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
   action.clampWhenFinished = once;
   $('#actionHint').textContent = hasExact ? `${SPECIES[active].name}：${action.getClip().name}` : `${SPECIES[active].name}：使用可用动作`;
@@ -228,11 +201,15 @@ async function show(kind, gltf) {
   info(kind);
   renderAnimalButtons();
   renderActionButtons();
-  removeCurrent();
+  if (current) {
+    if (mixer) mixer.stopAllAction();
+    scene.remove(current);
+  }
+  mixer = null;
   current = gltf.scene;
   prepare(current, kind);
   scene.add(current);
-  currentActions = makeActions(gltf);
+  makeActions(gltf);
   $('#modelStatus').textContent = `${SPECIES[kind].name} · 本地 GLB 已就绪`;
   playAction('idle');
 }
@@ -250,7 +227,6 @@ async function select(kind) {
     console.error(`${kind} load failed`, error);
     $('#modelStatus').textContent = `${SPECIES[kind].name} 加载失败`;
     $('#actionHint').textContent = error?.message || '模型读取失败';
-    $('#loading').classList.add('hide');
   }
 }
 
@@ -266,12 +242,10 @@ $('.animals').addEventListener('click', (e) => {
   const b = e.target.closest('.animal');
   if (b) select(b.dataset.animal);
 });
-
 $('#actions').addEventListener('click', (e) => {
   const b = e.target.closest('.action');
   if (b) playAction(b.dataset.action);
 });
-
 $('#voiceBtn').addEventListener('click', () => {
   const d = SPECIES[active];
   speechSynthesis.cancel();
@@ -289,32 +263,21 @@ info(active);
 (async () => {
   const firstThree = ANIMALS.slice(0, 3).map((x) => x.id);
   setLoading('正在准备动物馆', '首屏只等待前 3 个真实模型，其他模型随后后台加载。');
-
   const firstResults = await Promise.allSettled(firstThree.map((kind) => load(kind)));
-  const readyCount = firstResults.filter((x) => x.status === 'fulfilled').length;
-  const lionReady = firstResults[0]?.status === 'fulfilled';
   const firstReadyIndex = firstResults.findIndex((x) => x.status === 'fulfilled');
-
   if (firstReadyIndex >= 0) {
-    const firstKind = lionReady ? 'lion' : firstThree[firstReadyIndex];
-    await show(firstKind, firstResults[firstThree.indexOf(firstKind)].value);
+    const firstKind = firstThree[firstReadyIndex];
+    await show(firstKind, firstResults[firstReadyIndex].value);
   }
-
-  $('#loadingMessage').textContent = readyCount === 3
-    ? '首屏前三个真实动物已经加载完成，其余模型正在后台加载。'
-    : `首屏模型 ${readyCount}/3 个加载成功，其余模型继续后台加载。`;
+  const readyCount = firstResults.filter((x) => x.status === 'fulfilled').length;
+  $('#loadingMessage').textContent = readyCount === 3 ? '首屏前三个真实动物已经加载完成，其余模型正在后台加载。' : `首屏模型 ${readyCount}/3 个加载成功，其余模型继续后台加载。`;
   setTimeout(() => $('#loading').classList.add('hide'), 300);
-
   const queue = ANIMALS.map((x) => x.id).filter((id) => !firstThree.includes(id));
   const worker = async () => {
     while (queue.length) {
       const kind = queue.shift();
-      try {
-        await load(kind);
-      } catch (error) {
-        state[kind].phase = 'error';
-        console.warn(`${kind} background preload failed`, error);
-      }
+      try { await load(kind); }
+      catch (error) { state[kind].phase = 'error'; console.warn(`${kind} background preload failed`, error); }
     }
   };
   await Promise.all([worker(), worker()]);
