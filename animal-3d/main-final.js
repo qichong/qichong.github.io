@@ -8,16 +8,14 @@ const SPECIES = Object.fromEntries(ANIMALS.map(x => [x.id, x]));
 const cache = new Map();
 const pending = new Map();
 const state = Object.fromEntries(ANIMALS.map(x => [x.id, { loaded: 0, total: 0, phase: 'waiting' }]));
-
 const loader = new GLTFLoader();
+
 let scene, camera, renderer, controls;
 let current = null;
 let mixer = null;
 let currentActions = {};
 let active = 'lion';
-let currentSource = null;
 const clock = new THREE.Clock();
-const actionLabels = { idle: '◌ Idle', walk: '↗ Walk', roar: '◉ Attack', dead: '✕ Dead' };
 
 function setup() {
   scene = new THREE.Scene();
@@ -62,8 +60,8 @@ function setup() {
   animate();
 }
 
-function setLoading(text, detail) {
-  $('#loadingStage').textContent = text;
+function setLoading(title, detail) {
+  $('#loadingStage').textContent = title;
   $('#loadingMessage').textContent = detail;
 }
 
@@ -77,11 +75,11 @@ function info(kind) {
   $('#desc').textContent = d.desc;
 }
 
-function updateOverallProgress() {
+function updateProgress() {
   const entries = Object.values(state);
   const total = entries.reduce((n, s) => n + (s.total || 0), 0);
   const loaded = entries.reduce((n, s) => n + Math.min(s.loaded, s.total || s.loaded), 0);
-  const pct = total ? Math.round((loaded / total) * 100) : 0;
+  const pct = total ? Math.round(loaded / total * 100) : 0;
   $('#progressFill').style.width = `${pct}%`;
   $('#progressPercent').textContent = `${pct}%`;
   $('#progressSize').textContent = total ? `${(loaded / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(1)} MB` : '本地 GLB';
@@ -94,19 +92,17 @@ async function fetchBuffer(kind) {
     const s = state[kind];
     s.phase = 'downloading';
     setLoading(`正在读取 ${d.name}`, '模型已经放在 GitHub Pages 同域目录，不再跨域请求。');
-    updateOverallProgress();
+    updateProgress();
 
     const res = await fetch(d.url, { cache: 'force-cache' });
     if (!res.ok) throw new Error(`${d.name} HTTP ${res.status}`);
 
-    const contentLength = Number(res.headers.get('content-length')) || 0;
-    s.total = contentLength;
-
+    s.total = Number(res.headers.get('content-length')) || 0;
     if (!res.body) {
       const buffer = await res.arrayBuffer();
       s.loaded = buffer.byteLength;
       s.total = buffer.byteLength;
-      updateOverallProgress();
+      updateProgress();
       return buffer;
     }
 
@@ -120,7 +116,7 @@ async function fetchBuffer(kind) {
       size += value.byteLength;
       s.loaded = size;
       if (!s.total) s.total = size;
-      updateOverallProgress();
+      updateProgress();
     }
 
     s.total = size;
@@ -131,130 +127,100 @@ async function fetchBuffer(kind) {
       offset += chunk.byteLength;
     }
     s.loaded = size;
-    updateOverallProgress();
+    updateProgress();
     return out.buffer;
   })();
-
   pending.set(kind, p);
-  try {
-    return await p;
-  } finally {
-    pending.delete(kind);
-  }
+  try { return await p; } finally { pending.delete(kind); }
 }
 
 async function load(kind) {
   if (cache.has(kind)) return cache.get(kind);
-  const d = SPECIES[kind];
-  try {
-    const buffer = await fetchBuffer(kind);
-    state[kind].phase = 'parsing';
-    setLoading(`正在解析 ${d.name}`, '正在创建网格、材质、骨骼和动画。');
-    const gltf = await new Promise((resolve, reject) => loader.parse(buffer, './', resolve, reject));
-    cache.set(kind, gltf);
-    state[kind].phase = 'done';
-    return gltf;
-  } catch (error) {
-    state[kind].phase = 'error';
-    throw error;
-  }
+  const buffer = await fetchBuffer(kind);
+  state[kind].phase = 'parsing';
+  setLoading(`正在解析 ${SPECIES[kind].name}`, '正在创建网格、材质、骨骼和动画。');
+  const gltf = await new Promise((resolve, reject) => loader.parse(buffer, './', resolve, reject));
+  cache.set(kind, gltf);
+  state[kind].phase = 'done';
+  return gltf;
 }
 
 function prepare(model, kind) {
   if (model.userData.animalPrepared) return;
-  const d = SPECIES[kind];
+  const target = SPECIES[kind].target || 3.5;
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3()).length();
-  if (size > 0 && d.target) model.scale.multiplyScalar(d.target / size);
+  if (size > 0) model.scale.multiplyScalar(target / size);
   const fitted = new THREE.Box3().setFromObject(model);
   const center = fitted.getCenter(new THREE.Vector3());
   model.position.set(-center.x, -fitted.min.y, -center.z);
   model.traverse(o => {
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-      if (o.material?.map) o.material.map.colorSpace = THREE.SRGBColorSpace;
-    }
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    if (o.material?.map) o.material.map.colorSpace = THREE.SRGBColorSpace;
   });
   model.userData.animalPrepared = true;
 }
 
-function disposeCurrent() {
+function removeCurrent() {
   if (!current) return;
+  if (mixer) mixer.stopAllAction();
   scene.remove(current);
-  current.traverse(o => {
-    if (!o.isMesh) return;
-    o.geometry?.dispose?.();
-    const materials = Array.isArray(o.material) ? o.material : [o.material];
-    materials.forEach(m => {
-      if (!m) return;
-      for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) m[key]?.dispose?.();
-      m.dispose?.();
-    });
-  });
   current = null;
-  currentSource = null;
+  mixer = null;
+  currentActions = {};
 }
 
-function makeSegmentActions(gltf) {
+function makeActions(gltf, kind) {
+  if (!gltf.animations?.length) return {};
+  mixer = new THREE.AnimationMixer(gltf.scene);
   const result = {};
-  if (!gltf.animations?.length) return result;
-  const d = SPECIES[active];
 
-  if (d.id !== 'lion' && d.id !== 'tiger' && gltf.animations[0]) {
+  if (kind !== 'lion' && kind !== 'tiger' && gltf.animations[0]) {
     const whole = gltf.animations[0];
-    const fps = 24;
     const ranges = { idle: [0, 30], roar: [30, 60], dead: [60, 90], walk: [90, 120] };
     for (const [name, [from, to]] of Object.entries(ranges)) {
-      const clip = THREE.AnimationUtils.subclip(whole, `${d.id}-${name}`, from, to, fps);
+      const clip = THREE.AnimationUtils.subclip(whole, `${kind}-${name}`, from, to, 24);
       if (clip.duration > 0) result[name] = mixer.clipAction(clip);
     }
     return result;
   }
 
-  for (const clip of gltf.animations || []) {
+  for (const clip of gltf.animations) {
     const n = clip.name || '';
     if (!result.idle && /idle|stand|rest|breath|wait/i.test(n)) result.idle = mixer.clipAction(clip);
     if (!result.walk && /walk|walking|stroll|run|running|locomotion|move/i.test(n)) result.walk = mixer.clipAction(clip);
     if (!result.roar && /roar|growl|attack|call|cry|bite/i.test(n)) result.roar = mixer.clipAction(clip);
   }
-  if (!result.idle && gltf.animations?.[0]) result.idle = mixer.clipAction(gltf.animations[0]);
+  if (!result.idle && gltf.animations[0]) result.idle = mixer.clipAction(gltf.animations[0]);
   return result;
-}
-
-function buildActions(gltf, kind) {
-  if (mixer) mixer.stopAllAction();
-  mixer = gltf.animations?.length ? new THREE.AnimationMixer(gltf.scene) : null;
-  currentActions = mixer ? makeSegmentActions(gltf) : {};
-  return currentActions;
 }
 
 function playAction(mode) {
   document.querySelectorAll('.action').forEach(b => b.classList.toggle('active', b.dataset.action === mode));
-  if (!mixer || !currentActions[mode]) {
-    const available = Object.keys(currentActions);
-    $('#actionHint').textContent = available.length ? `当前模型可用：${available.join(' / ')}` : '当前模型没有骨骼动作。';
+  const action = currentActions[mode] || currentActions.idle;
+  if (!action) {
+    $('#actionHint').textContent = '当前模型没有骨骼动作。';
     return;
   }
-  Object.values(currentActions).forEach(action => action.stop());
-  const action = currentActions[mode];
+  Object.values(currentActions).forEach(a => a.stop());
   action.reset().fadeIn(0.18).play();
   const once = mode === 'roar' || mode === 'dead';
   action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
   if (once) action.clampWhenFinished = true;
-  $('#actionHint').textContent = `本地 GLB：${mode === 'roar' ? 'Attack' : mode}`;
+  $('#actionHint').textContent = `${SPECIES[active].name}：${mode === 'roar' ? 'Attack' : mode}`;
 }
 
 async function show(kind, gltf) {
   active = kind;
   info(kind);
   document.querySelectorAll('.animal').forEach(b => b.classList.toggle('active', b.dataset.animal === kind));
-  disposeCurrent();
+  removeCurrent();
   current = gltf.scene;
-  currentSource = kind;
   prepare(current, kind);
   scene.add(current);
-  buildActions(gltf, kind);
+  currentActions = makeActions(gltf, kind);
   $('#modelStatus').textContent = `${SPECIES[kind].name} · 本地 GLB 已就绪`;
   playAction('idle');
 }
@@ -262,12 +228,12 @@ async function show(kind, gltf) {
 async function select(kind) {
   active = kind;
   info(kind);
-  document.querySelectorAll('.animal').forEach(b => b.classList.toggle('active', b.dataset.animal === kind));
   try {
     const gltf = await load(kind);
     await show(kind, gltf);
     $('#loading').classList.add('hide');
   } catch (error) {
+    state[kind].phase = 'error';
     console.error(`${kind} load failed`, error);
     $('#modelStatus').textContent = `${SPECIES[kind].name} 加载失败`;
     $('#actionHint').textContent = error?.message || '模型读取失败';
@@ -307,15 +273,10 @@ info(active);
   const preloads = ['lion', 'tiger', 'rhino', 'shark'];
   setLoading('正在准备动物馆', '首批 4 个模型从本地 GitHub Pages 目录读取；其余模型点击后按需加载。');
   const results = await Promise.allSettled(preloads.map(kind => load(kind)));
+  const firstReady = results.findIndex(x => x.status === 'fulfilled');
+  if (firstReady >= 0) await show(preloads[firstReady], results[firstReady].value);
   const ready = results.filter(x => x.status === 'fulfilled').length;
-  const first = results[0];
-  if (first?.status === 'fulfilled') {
-    await show('lion', first.value);
-  } else {
-    const fallback = results.find((x, i) => x.status === 'fulfilled' && preloads[i]);
-    if (fallback) await show(preloads[results.indexOf(fallback)], fallback.value);
-  }
-  $('#loadingMessage').textContent = `首批模型 ${ready}/${preloads.length} 个已就绪。其余动物全部保存在本项目 models/ 目录，点击后加载。`;
+  $('#loadingMessage').textContent = `首批模型 ${ready}/${preloads.length} 个已就绪。其余动物全部保存在本项目 models/ 目录，点击后按需加载。`;
   $('#progressFill').style.width = '100%';
   $('#progressPercent').textContent = '100%';
   setTimeout(() => $('#loading').classList.add('hide'), 500);
