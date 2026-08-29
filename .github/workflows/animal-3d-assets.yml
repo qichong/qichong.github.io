@@ -25,10 +25,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p animal-3d/models
+          mkdir -p animal-3d/models .animal-backup
 
-          # Remove the previous low-poly animal set. Keep only the existing tiger
-          # temporarily; lion and all other selected models are downloaded again.
+          # Keep the existing Tiger while replacing the old low-poly set.
+          if [ -f animal-3d/models/tiger.glb ]; then
+            cp animal-3d/models/tiger.glb .animal-backup/tiger.glb
+          fi
           find animal-3d/models -maxdepth 1 -type f -name '*.glb' -delete
 
           download() {
@@ -40,7 +42,7 @@ jobs:
             test "$(head -c 4 "animal-3d/models/$out")" = "glTF"
           }
 
-          # Public open-water assets with stable raw GitHub URLs.
+          # Stable public realistic assets from the open-water project.
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/blue_whale_-_textured.glb' 'whale.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/flying_seagull.glb' 'seagull.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/scarlet_macaw.glb' 'macaw.glb'
@@ -49,19 +51,22 @@ jobs:
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/fish/tuna.glb' 'tuna.glb'
           download 'https://raw.githubusercontent.com/bob6664569/open-water/main/site/assets/animals/asteroid_starfish_or_seastar.glb' 'starfish.glb'
 
-          # Khronos official animated Fox sample.
+          # Official Khronos animated Fox sample.
           download 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb' 'fox.glb'
 
-          # Hand-picked Sloyd realistic models with stable public GLB endpoints.
+          # Verified public Sloyd realistic / realistic-leaning GLB endpoints.
           download 'https://storage.googleapis.com/ai-services-quality/jobs/or9arjbu.glb' 'elephant.glb'
           download 'https://storage.googleapis.com/ai-services-quality/jobs/cprtjpcd.glb' 'wolf.glb'
           download 'https://storage.googleapis.com/ai-services-quality/jobs/pqw5ic98.glb' 'lynx.glb'
           download 'https://storage.googleapis.com/ai-services-quality/jobs/vsqb4ncm.glb' 'eagle.glb'
 
-          # Sloyd currently exposes hundreds of CC BY 4.0 animal models as public
-          # detail pages. For the remaining realistic species, discover the best
-          # matching model from the live animal categories instead of hard-coding
-          # fragile third-party CDN URLs.
+          # Restore the user's original Tiger.
+          cp .animal-backup/tiger.glb animal-3d/models/tiger.glb
+          download 'https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb' 'lion.glb'
+
+          # Discover strong natural-animal candidates for the remaining slots from
+          # Sloyd's public CC BY 4.0 animal catalog. Models with fantasy/cartoon
+          # signals are explicitly rejected.
           python3 <<'PY'
           import html
           import re
@@ -76,145 +81,100 @@ jobs:
               '/free-3d-models/animals-creatures/sea-life',
               '/free-3d-models/animals-creatures/reptiles',
           ]
-
           bad = re.compile(r'\b(spectral|ghost|alien|monster|demon|zombie|robot|cute|cartoon|stylized|low-poly|toy|statue|skull|fantasy|wyrm|dragon|wizard|druid)\b', re.I)
-          realistic = re.compile(r'\b(realistic|anatomically|detailed|photoreal|natural|wildlife)\b', re.I)
-
-          species = {
-              'bear': ['bear'],
-              'deer': ['deer', 'doe', 'stag'],
-              'horse': ['horse'],
-              'giraffe': ['giraffe'],
-              'zebra': ['zebra'],
-              'rhino': ['rhino', 'rhinoceros'],
-              'hippo': ['hippo', 'hippopotamus'],
-              'moose': ['moose'],
-              'boar': ['boar', 'warthog'],
-              'owl': ['owl'],
-              'seal': ['seal'],
-              'crocodile': ['crocodile', 'alligator'],
+          good = re.compile(r'\b(realistic|anatomically|detailed|photoreal|natural|wildlife)\b', re.I)
+          targets = {
+              'bear': ['bear'], 'deer': ['deer', 'doe', 'stag'], 'horse': ['horse'],
+              'giraffe': ['giraffe'], 'zebra': ['zebra'], 'rhino': ['rhino', 'rhinoceros'],
+              'hippo': ['hippo', 'hippopotamus'], 'moose': ['moose'], 'boar': ['boar', 'warthog'],
+              'owl': ['owl'], 'seal': ['seal'], 'crocodile': ['crocodile', 'alligator'],
               'rabbit': ['rabbit', 'hare'],
           }
+          target_score = {'bear':10,'deer':8,'horse':8,'giraffe':8,'zebra':8,'rhino':7,'hippo':6,'moose':7,'boar':5,'owl':5,'seal':4,'crocodile':3,'rabbit':2}
 
           def get(url):
               req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
               with urllib.request.urlopen(req, timeout=30) as r:
                   return r.read().decode('utf-8', 'ignore')
 
-          catalog = []
+          candidates = []
           for page in pages:
               try:
-                  text = get(BASE + page)
+                  source = get(BASE + page)
               except Exception as exc:
-                  print('WARN fetch', page, exc)
+                  print('WARN', page, exc)
                   continue
-              # Sloyd model cards are normal anchors; keep title + href and infer
-              # the public 8-char job id from the detail-page slug suffix.
-              for href, raw_title in re.findall(r'href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', text, re.I | re.S):
-                  title = re.sub(r'<[^>]+>', ' ', raw_title)
-                  title = html.unescape(re.sub(r'\s+', ' ', title)).strip()
-                  if not title:
+              for href, raw in re.findall(r'href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', source, re.I | re.S):
+                  title = html.unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', raw))).strip()
+                  if not title or bad.search(title):
                       continue
-                  m = re.search(r'/free-3d-models/[^"?#]*?([a-z0-9]{8})/?$', href, re.I)
-                  if not m:
+                  match = re.search(r'/free-3d-models/[^"?#]*?([a-z0-9]{8})/?$', href, re.I)
+                  if not match:
                       continue
-                  job = m.group(1).lower()
-                  full = href if href.startswith('http') else BASE + href
-                  score_base = (50 if realistic.search(title) else 0) - (200 if bad.search(title) else 0)
+                  job = match.group(1).lower()
+                  page_url = href if href.startswith('http') else BASE + href
                   creator = title.rsplit(' by ', 1)[1].strip() if ' by ' in title else 'Sloyd creator'
-                  for key, words in species.items():
-                      if any(re.search(r'\b' + re.escape(w) + r'\b', title, re.I) for w in words):
-                          score = score_base
-                          if realistic.search(title): score += 80
-                          if len(title) < 90: score += 10
-                          catalog.append((score, key, title, creator, full, job))
+                  for key, words in targets.items():
+                      if any(re.search(r'\b' + re.escape(word) + r'\b', title, re.I) for word in words):
+                          score = target_score[key]
+                          if good.search(title): score += 100
+                          score += max(0, 20 - len(title) // 10)
+                          candidates.append((score, key, title, creator, page_url, job))
 
           chosen = {}
-          for item in sorted(catalog, key=lambda x: (-x[0], x[2])):
-              score, key, title, creator, url, job = item
-              if key in chosen or score < 0:
-                  continue
-              chosen[key] = item
+          for row in sorted(candidates, key=lambda x: (-x[0], x[2])):
+              if row[1] not in chosen:
+                  chosen[row[1]] = row
 
-          # Stable fallbacks for a couple of species where Sloyd's card order can
-          # change without warning. These are still CC BY 4.0 public model URLs.
-          fallbacks = {
-              # These IDs are verified Sloyd public detail-page suffixes.
-              'owl': ('Realistic 3D Model Of A Spectral Owl With Smooth...', 'IgVerse', BASE + '/free-3d-models/model/realistic-3d-model-of-a-spectral-owl-with-smooth-xxdvjqbk', 'xxdvjqbk'),
-          }
-          for key, data in fallbacks.items():
-              chosen.setdefault(key, (0, key, *data))
+          required = list(targets)
+          missing = [x for x in required if x not in chosen]
+          if missing:
+              raise SystemExit('No public realistic candidate found for: ' + ', '.join(missing))
 
-          for key in species:
-              if key not in chosen:
-                  raise SystemExit(f'No realistic public Sloyd candidate found for {key}')
-
-          manifest = []
-          for key, item in chosen.items():
-              _, _, title, creator, page_url, job = item
-              target = {
-                  'bear': 4.0, 'deer': 3.7, 'horse': 4.0, 'giraffe': 4.6,
-                  'zebra': 4.3, 'rhino': 4.2, 'hippo': 4.0, 'moose': 4.3,
-                  'boar': 3.7, 'owl': 3.4, 'seal': 3.6, 'crocodile': 4.0,
-                  'rabbit': 3.0,
-              }[key]
-              glb = f'https://storage.googleapis.com/ai-services-quality/jobs/{job}.glb'
-              manifest.append((key, title, creator, page_url, glb, target))
-
-          # Download discovered models from their public Sloyd job endpoints.
-          for key, title, creator, page_url, glb, target in manifest:
+          attr = ['# Realistic animal model sources', '',
+                  'The previous low-poly Gobkit set has been replaced with realistic / realistic-leaning assets.', '',
+                  'Sloyd models: CC BY 4.0. Creator names and source pages are recorded below.',
+                  'Open Water sources: license information is recorded from the upstream project.',
+                  'Khronos Fox: see the official glTF Sample Assets README for its CC0 / CC BY 4.0 credits.', '',
+                  '## Sloyd models']
+          for key, title, creator, page_url, job in [chosen[k] for k in required]:
+              url = f'https://storage.googleapis.com/ai-services-quality/jobs/{job}.glb'
               out = OUT / f'{key}.glb'
-              print('Downloading', key, title, '->', glb)
-              req = urllib.request.Request(glb, headers={'User-Agent': 'Mozilla/5.0'})
+              print('Downloading', key, title, url)
+              req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
               with urllib.request.urlopen(req, timeout=180) as r, out.open('wb') as f:
                   f.write(r.read())
-              if out.stat().st_size < 32 or out.read_bytes()[:4] != b'glTF':
-                  raise SystemExit(f'Invalid GLB for {key}: {glb}')
+              data = out.read_bytes()
+              if len(data) < 32 or data[:4] != b'glTF':
+                  raise SystemExit(f'Invalid GLB for {key}')
+              attr.append(f'- **{key}** — {title} — {creator} — {page_url} — CC BY 4.0')
 
-          lines = [
-              '# Realistic animal model sources',
-              '',
-              'This project intentionally replaces the previous low-poly Gobkit set with realistic / realistic-leaning assets.',
-              '',
-              '## License',
-              '- Sloyd-discovered models: CC BY 4.0. Each entry below includes its source detail page and creator name as shown by Sloyd.',
-              '- Khronos Fox: mixed CC0 / CC BY 4.0 credits, see the official sample README.',
-              '- Open Water assets: use the licenses stated in the upstream THIRD-PARTY-NOTICES.',
-              '',
-              '## Sloyd models',
-          ]
-          for key, title, creator, page_url, glb, target in sorted(manifest):
-              lines += [f'- **{key}** — {title} — {creator} — {page_url} — CC BY 4.0']
-          lines += [
-              '',
-              '## Fixed-source models',
+          attr += ['', '## Fixed-source models',
+              '- lion — code4fukui/vr-cats — CC BY-NC-SA 4.0 (retain original notice)',
+              '- tiger — existing project model',
               '- elephant — Sloyd public model `or9arjbu` — CC BY 4.0',
               '- wolf — Sloyd White Wolf `cprtjpcd` — CC BY 4.0',
               '- lynx — Sloyd Lynx `pqw5ic98` — CC BY 4.0',
               '- eagle — Sloyd Giant Eagle `vsqb4ncm` — CC BY 4.0',
-              '- fox — Khronos glTF Sample Assets / Fox — see official README for CC0 / CC BY 4.0 credits',
-              '- whale — blue whale textured, upstream open-water project, CC BY 4.0',
-              '- seagull — flying seagull, upstream open-water project, CC BY-SA 4.0',
-              '- macaw — scarlet macaw, upstream open-water project, CC BY 4.0',
-              '- shark — shark, upstream open-water project, CC BY 4.0',
-              '- swordfish — swordfish, upstream open-water project, CC0 1.0',
-              '- tuna — tuna, upstream open-water project, CC0 1.0',
-              '- starfish — asteroid starfish / sea star, upstream open-water project, CC0 1.0',
-          ]
-          (OUT / 'ATTRIBUTIONS.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+              '- fox — Khronos glTF Sample Assets Fox',
+              '- whale — open-water blue whale textured — CC BY 4.0',
+              '- seagull — open-water flying seagull — CC BY-SA 4.0',
+              '- macaw — open-water scarlet macaw — CC BY 4.0',
+              '- shark — open-water shark — CC BY 4.0',
+              '- swordfish — open-water swordfish — CC0 1.0',
+              '- tuna — open-water tuna — CC0 1.0',
+              '- starfish — open-water asteroid starfish / sea star — CC0 1.0']
+          (OUT / 'ATTRIBUTIONS.md').write_text('\n'.join(attr) + '\n', encoding='utf-8')
           PY
 
-          # Existing realistic lion source and the existing Tiger stay local.
-          download 'https://raw.githubusercontent.com/code4fukui/vr-cats/main/lion.glb' 'lion.glb'
-          test -s animal-3d/models/tiger.glb
-
-      - name: Commit downloaded realistic assets
+      - name: Commit realistic animal assets
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          rm -rf .animal-backup
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add animal-3d/models
+          git add -A animal-3d/models
           if git diff --cached --quiet; then
             echo 'No asset changes.'
             exit 0
