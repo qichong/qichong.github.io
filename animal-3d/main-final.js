@@ -100,35 +100,11 @@ async function fetchBuffer(kind) {
     updateProgress();
     const res = await fetch(d.url, { cache: 'force-cache' });
     if (!res.ok) throw new Error(`${d.name} HTTP ${res.status}`);
-    const encoding = res.headers.get('content-encoding');
-    const declaredTotal = Number(res.headers.get('content-length')) || 0;
-    s.total = encoding ? 0 : declaredTotal;
-    if (!res.body) {
-      const buffer = await res.arrayBuffer();
-      s.loaded = buffer.byteLength;
-      s.total = buffer.byteLength;
-      updateProgress();
-      return buffer;
-    }
-    const reader = res.body.getReader();
-    const chunks = [];
-    let size = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      size += value.byteLength;
-      s.loaded = size;
-      if (!s.total) s.total = size;
-      updateProgress();
-    }
-    s.total = size;
-    const out = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.byteLength; }
-    s.loaded = size;
+    const buffer = await res.arrayBuffer();
+    s.loaded = buffer.byteLength;
+    s.total = buffer.byteLength;
     updateProgress();
-    return out.buffer;
+    return buffer;
   })();
   pending.set(kind, p);
   try { return await p; } finally { pending.delete(kind); }
@@ -144,10 +120,7 @@ async function load(kind) {
   const resourcePath = new URL('.', modelUrl).href;
   console.debug(`[animal-3d] ${d.name} resource path:`, resourcePath);
   const gltf = await new Promise((resolve, reject) => {
-    loader.parse(buffer, resourcePath, (result) => resolve(result), (error) => {
-      console.error(`[animal-3d] ${d.name} parse/texture error`, error);
-      reject(error);
-    });
+    loader.parse(buffer, resourcePath, resolve, reject);
   });
   gltf.scene.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -160,6 +133,7 @@ async function load(kind) {
       if (material.roughnessMap) material.roughnessMap.colorSpace = THREE.NoColorSpace;
       if (material.normalMap) material.normalMap.colorSpace = THREE.NoColorSpace;
       if (material.aoMap) material.aoMap.colorSpace = THREE.NoColorSpace;
+      material.needsUpdate = true;
     });
   });
   cache.set(kind, gltf);
@@ -180,7 +154,6 @@ function prepare(model, kind) {
     if (!o.isMesh) return;
     o.castShadow = true;
     o.receiveShadow = true;
-    if (o.material?.map) o.material.map.colorSpace = THREE.SRGBColorSpace;
   });
   model.userData.animalPrepared = true;
 }
