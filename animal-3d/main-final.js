@@ -47,14 +47,11 @@ function setup() {
   const rim = new THREE.DirectionalLight(0x5b9dff, 2);
   rim.position.set(-5, 3, -4);
   scene.add(rim);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(7, 64), new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-  const grid = new THREE.GridHelper(12, 24, 0x342b1e, 0x161616);
-  grid.position.y = 0.01;
-  scene.add(grid);
+
+  // 不再添加旧版的“黑色圆盘 + 方格网格”。
+  // 场景地面由 threejs-examples-scenes.js 的环境系统统一负责，避免出现圆形黑底。
   initOfficialScenes(scene, () => active);
+
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
