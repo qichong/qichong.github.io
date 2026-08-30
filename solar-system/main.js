@@ -16,9 +16,8 @@ const data=[
 ];
 
 const MODEL_BASE='https://raw.githubusercontent.com/Vivekkk-1/Galaticvisions/master/GLB/';
-const modelUrls={
- sun:MODEL_BASE+'Sun.glb', mercury:MODEL_BASE+'Mercury.glb', venus:MODEL_BASE+'Venus.glb', earth:MODEL_BASE+'Earth.glb', mars:MODEL_BASE+'Mars.glb', jupiter:MODEL_BASE+'Jupiter.glb', saturn:MODEL_BASE+'Saturn.glb', uranus:MODEL_BASE+'Uranus.glb', neptune:MODEL_BASE+'Neptune.glb', pluto:MODEL_BASE+'Pluto_1_2374.glb'
-};
+const modelUrls={sun:MODEL_BASE+'Sun.glb',mercury:MODEL_BASE+'Mercury.glb',venus:MODEL_BASE+'Venus.glb',mars:MODEL_BASE+'Mars.glb',jupiter:MODEL_BASE+'Jupiter.glb',saturn:MODEL_BASE+'Saturn.glb',uranus:MODEL_BASE+'Uranus.glb',neptune:MODEL_BASE+'Neptune.glb',pluto:MODEL_BASE+'Pluto_1_2374.glb'};
+const moonUrl=MODEL_BASE+'Moon.glb';
 
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x01030a);
 const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.05,1000);camera.position.set(30,20,38);
@@ -33,14 +32,12 @@ function fallback(d){const mesh=new THREE.Mesh(new THREE.SphereGeometry(d.size,6
 function makeRing(d,mesh){const ring=new THREE.Mesh(new THREE.RingGeometry(d.size*1.35,d.size*2.35,160),new THREE.MeshStandardMaterial({color:0xd0ba91,transparent:true,opacity:.78,side:THREE.DoubleSide,roughness:1}));ring.rotation.x=Math.PI/2.45;mesh.add(ring);}
 function normalizeModel(model,d){const box=new THREE.Box3().setFromObject(model);const size=box.getSize(new THREE.Vector3());const max=Math.max(size.x,size.y,size.z)||1;model.scale.setScalar((d.size*2)/max);const box2=new THREE.Box3().setFromObject(model);const center=box2.getCenter(new THREE.Vector3());model.position.sub(center);model.position.x+=d.distance;model.rotation.z=d.tilt||0;model.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}});}
 function create(d){if(d.distance)orbitLine(d.distance);const pivot=new THREE.Group();pivot.rotation.y=Math.random()*Math.PI*2;root.add(pivot);const mesh=fallback(d);mesh.userData.id=d.id;pivot.add(mesh);const obj={...d,pivot,mesh,loaded:false};objects.push(obj);
- if(d.id==='sun'){mesh.material=new THREE.MeshBasicMaterial({map:texture(d)});mesh.add(new THREE.Mesh(new THREE.SphereGeometry(d.size*1.18,40,28),new THREE.MeshBasicMaterial({color:0xff9b28,transparent:true,opacity:.16,side:THREE.BackSide})));}
- if(d.id==='saturn')makeRing(d,mesh);
- if(d.id==='earth'){const moonPivot=new THREE.Group();mesh.add(moonPivot);const moon=new THREE.Mesh(new THREE.SphereGeometry(.16,32,20),new THREE.MeshStandardMaterial({color:0xa9a8a2,roughness:1}));moon.position.x=1.45;moon.userData.id='moon';moonPivot.add(moon);obj.moonPivot=moonPivot;obj.moon=moon;}
- const url=modelUrls[d.id];if(url){loader.load(url,g=>{const model=g.scene;normalizeModel(model,d);pivot.remove(mesh);pivot.add(model);obj.mesh=model;obj.loaded=true;model.userData.id=d.id;document.body.dataset.models='loaded';},undefined,()=>{document.body.dataset.models='fallback';});}
- return obj;}
+if(d.id==='sun'){mesh.material=new THREE.MeshBasicMaterial({map:texture(d)});mesh.add(new THREE.Mesh(new THREE.SphereGeometry(d.size*1.18,40,28),new THREE.MeshBasicMaterial({color:0xff9b28,transparent:true,opacity:.16,side:THREE.BackSide})))}
+if(d.id==='saturn')makeRing(d,mesh);
+if(d.id==='earth'){const moonPivot=new THREE.Group();mesh.add(moonPivot);const moon=new THREE.Mesh(new THREE.SphereGeometry(.16,32,20),new THREE.MeshStandardMaterial({color:0xa9a8a2,roughness:1}));moon.position.x=1.45;moon.userData.id='moon';moonPivot.add(moon);obj.moonPivot=moonPivot;obj.moon=moon;loader.load(moonUrl,g=>{const m=g.scene;const box=new THREE.Box3().setFromObject(m);const s=box.getSize(new THREE.Vector3());m.scale.setScalar(.32/(Math.max(s.x,s.y,s.z)||1));const c=new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());m.position.sub(c);m.position.x=1.45;moonPivot.remove(moon);moonPivot.add(m);obj.moon=m;})}
+const url=modelUrls[d.id];if(url){loader.load(url,g=>{const model=g.scene;normalizeModel(model,d);pivot.remove(mesh);pivot.add(model);obj.mesh=model;obj.loaded=true;model.userData.id=d.id;},undefined,()=>{});}return obj;}
 data.forEach(create);
 const ag=new THREE.BufferGeometry(),ap=[];for(let i=0;i<1800;i++){const r=12.2+Math.random()*2.1,a=Math.random()*Math.PI*2;ap.push(Math.cos(a)*r,(Math.random()-.5)*.9,Math.sin(a)*r);}ag.setAttribute('position',new THREE.Float32BufferAttribute(ap,3));root.add(new THREE.Points(ag,new THREE.PointsMaterial({color:0xb7aa90,size:.05,transparent:true,opacity:.75})));
-
 let selected=objects[0],paused=false,speed=1;const $=id=>document.getElementById(id),ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
 function show(d){selected=d;$('planetNo').textContent=String(Math.max(0,data.findIndex(x=>x.id===d.id)+1)).padStart(2,'0');$('latin').textContent=d.latin;$('name').textContent=d.name;$('tagline').textContent=d.tag;$('desc').textContent=d.desc;$('facts').innerHTML=d.facts.map(f=>`<div class="fact"><b>${f[1]}</b><span>${f[0]}</span></div>`).join('');document.querySelectorAll('.planet-list button').forEach(b=>b.classList.toggle('active',b.dataset.id===d.id));}
 const list=$('planetList');data.forEach((d,i)=>{const b=document.createElement('button');b.dataset.id=d.id;b.innerHTML=`<em>${String(i+1).padStart(2,'0')}</em>${d.name}`;b.onclick=()=>select(d);list.appendChild(b)});show(selected);
