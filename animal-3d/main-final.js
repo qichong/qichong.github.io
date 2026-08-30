@@ -110,6 +110,53 @@ async function fetchBuffer(kind) {
   try { return await p; } finally { pending.delete(kind); }
 }
 
+async function applyEmbeddedTextureFallback(gltf, kind) {
+  const parser = gltf?.parser;
+  const json = parser?.json;
+  const materials = json?.materials || [];
+  const textureIndexes = new Set();
+
+  for (const materialDef of materials) {
+    const ext = materialDef?.extensions?.KHR_materials_pbrSpecularGlossiness;
+    const index = ext?.diffuseTexture?.index;
+    if (Number.isInteger(index)) textureIndexes.add(index);
+  }
+
+  if (!textureIndexes.size || !parser?.getDependency) return;
+
+  const textures = [];
+  for (const index of textureIndexes) {
+    try {
+      const texture = await parser.getDependency('texture', index);
+      if (texture) {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        textures.push(texture);
+      }
+    } catch (error) {
+      console.warn(`[animal-3d] ${kind} embedded texture ${index} failed`, error);
+    }
+  }
+  if (!textures.length) return;
+
+  let textureCursor = 0;
+  gltf.scene.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach((material) => {
+      if (!material) return;
+      if (!material.map) {
+        const texture = textures[Math.min(textureCursor, textures.length - 1)];
+        material.map = texture;
+        textureCursor += 1;
+        material.color?.set?.(0xffffff);
+        material.needsUpdate = true;
+        console.info(`[animal-3d] ${kind} applied embedded diffuse texture fallback`);
+      }
+    });
+  });
+}
+
 async function load(kind) {
   if (cache.has(kind)) return cache.get(kind);
   const buffer = await fetchBuffer(kind);
@@ -122,6 +169,7 @@ async function load(kind) {
   const gltf = await new Promise((resolve, reject) => {
     loader.parse(buffer, resourcePath, resolve, reject);
   });
+  await applyEmbeddedTextureFallback(gltf, kind);
   gltf.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
