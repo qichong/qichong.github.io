@@ -19,45 +19,203 @@ let current = null;
 let mixer = null;
 let currentActions = {};
 let active = 'lion';
+let environment = null;
 const clock = new THREE.Clock();
+
+const ENVIRONMENTS = {
+  savanna: { sky: 0xb9dcff, fog: 0xc5d9d1, ground: 0xb99a67, fogDensity: 0.012 },
+  forest: { sky: 0xaec8c0, fog: 0xb5c7c0, ground: 0x68785b, fogDensity: 0.018 },
+  rainforest: { sky: 0x8fb8af, fog: 0x7fa39a0, ground: 0x566947, fogDensity: 0.022 },
+  wetland: { sky: 0xacc6cf, fog: 0xa7b9b4, ground: 0x61715b, fogDensity: 0.018 },
+  meadow: { sky: 0xb9ddff, fog: 0xd2dfd7, ground: 0x83a467, fogDensity: 0.011 },
+  mountain: { sky: 0xc6dcf3, fog: 0xb8c7cf, ground: 0x7b8270, fogDensity: 0.012 },
+  coast: { sky: 0xb9dcf2, fog: 0xb5cdd1, ground: 0xc9b989, fogDensity: 0.01 },
+  ocean: { sky: 0x4b91ad, fog: 0x4d8ca3, ground: 0x2e7081, fogDensity: 0.016 },
+  seabed: { sky: 0x145168, fog: 0x1c5d70, ground: 0x6a795d, fogDensity: 0.02 }
+};
+
+function environmentFor(kind) {
+  const map = {
+    lion: 'savanna',
+    tiger: 'forest',
+    fox: 'forest',
+    black_panther: 'rainforest',
+    lioness: 'savanna',
+    alligator: 'wetland',
+    shark: 'ocean',
+    whale: 'ocean',
+    horse: 'meadow',
+    deer: 'mountain',
+    rabbit: 'meadow',
+    seagull: 'coast',
+    macaw: 'rainforest',
+    starfish: 'seabed',
+    swordfish: 'ocean',
+    tuna: 'ocean'
+  };
+  return map[kind] || 'meadow';
+}
+
+function disposeEnvironment() {
+  if (!environment) return;
+  environment.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.geometry?.dispose?.();
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach((m) => m?.dispose?.());
+  });
+  scene.remove(environment);
+  environment = null;
+}
+
+function mesh(geometry, material, position = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]) {
+  const m = new THREE.Mesh(geometry, material);
+  m.position.set(...position);
+  m.rotation.set(...rotation);
+  m.scale.set(...scale);
+  m.receiveShadow = true;
+  m.castShadow = true;
+  return m;
+}
+
+function addTree(group, x, z, scale = 1, tropical = false) {
+  const trunk = mesh(
+    new THREE.CylinderGeometry(0.09 * scale, 0.16 * scale, 1.4 * scale, 7),
+    new THREE.MeshStandardMaterial({ color: tropical ? 0x5f4a32 : 0x6c5538, roughness: 1 }),
+    [x, 0.7 * scale, z]
+  );
+  group.add(trunk);
+  if (tropical) {
+    group.add(mesh(new THREE.ConeGeometry(0.8 * scale, 1.5 * scale, 7), new THREE.MeshStandardMaterial({ color: 0x2e6635, roughness: 1 }), [x, 1.65 * scale, z]));
+    group.add(mesh(new THREE.SphereGeometry(0.65 * scale, 9, 7), new THREE.MeshStandardMaterial({ color: 0x438247, roughness: 1 }), [x - 0.32 * scale, 2.05 * scale, z + 0.12 * scale]));
+  } else {
+    group.add(mesh(new THREE.ConeGeometry(0.75 * scale, 1.5 * scale, 7), new THREE.MeshStandardMaterial({ color: 0x4f763f, roughness: 1 }), [x, 1.65 * scale, z]));
+    group.add(mesh(new THREE.ConeGeometry(0.58 * scale, 1.1 * scale, 7), new THREE.MeshStandardMaterial({ color: 0x608b48, roughness: 1 }), [x, 2.3 * scale, z]));
+  }
+}
+
+function addGrass(group, x, z, scale = 1, count = 8) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6d923e, roughness: 1 });
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    const r = 0.18 * scale + (i % 2) * 0.06;
+    group.add(mesh(new THREE.ConeGeometry(0.025 * scale, (0.28 + (i % 3) * 0.08) * scale, 4), mat, [x + Math.cos(a) * r, 0.16 * scale, z + Math.sin(a) * r], [0, 0, (i % 2 ? 0.22 : -0.22)]));
+  }
+}
+
+function addRock(group, x, z, s = 1, color = 0x68665e) {
+  group.add(mesh(new THREE.DodecahedronGeometry(0.32 * s, 0), new THREE.MeshStandardMaterial({ color, roughness: 1 }), [x, 0.2 * s, z], [0, (x + z) % 1, 0], [1.25, 0.75, 1]));
+}
+
+function addMountain(group, x, z, s = 1) {
+  group.add(mesh(new THREE.ConeGeometry(1.5 * s, 2.7 * s, 5), new THREE.MeshStandardMaterial({ color: 0x69746c, roughness: 1 }), [x, 1.25 * s, z]));
+  group.add(mesh(new THREE.ConeGeometry(0.55 * s, 1.1 * s, 5), new THREE.MeshStandardMaterial({ color: 0xd7dfe2, roughness: 1 }), [x, 2.2 * s, z - 0.02]));
+}
+
+function buildEnvironment(kind) {
+  disposeEnvironment();
+  const type = environmentFor(kind);
+  const cfg = ENVIRONMENTS[type];
+  environment = new THREE.Group();
+  environment.name = `environment-${type}`;
+
+  scene.background = new THREE.Color(cfg.sky);
+  scene.fog = new THREE.FogExp2(cfg.fog, cfg.fogDensity);
+
+  if (type === 'ocean' || type === 'seabed') {
+    const water = mesh(new THREE.CircleGeometry(8, 48), new THREE.MeshStandardMaterial({ color: type === 'seabed' ? 0x347b8c : 0x3189a8, roughness: 0.25, metalness: 0.05, transparent: true, opacity: 0.82 }), [0, -0.08, 0], [-Math.PI / 2, 0, 0]);
+    environment.add(water);
+    for (let i = 0; i < 10; i++) {
+      const x = -6 + (i % 5) * 3;
+      const z = -6 + Math.floor(i / 5) * 3;
+      environment.add(mesh(new THREE.ConeGeometry(0.14 + (i % 3) * 0.05, 0.4 + (i % 4) * 0.12, 5), new THREE.MeshStandardMaterial({ color: 0x6e9a61, roughness: 1 }), [x, 0.15, z]));
+    }
+    for (let i = 0; i < 12; i++) addRock(environment, -5.5 + (i * 1.13) % 10.5, -5 + ((i * 1.87) % 9), 0.5 + (i % 3) * 0.18, type === 'seabed' ? 0x68765d : 0x4f7880);
+    for (let i = 0; i < 6; i++) {
+      const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.08 + (i % 3) * 0.03, 10, 8), new THREE.MeshStandardMaterial({ color: 0xb8efff, transparent: true, opacity: 0.28, roughness: 0.2 }));
+      bubble.position.set(-2.5 + i * 0.9, 0.5 + (i % 3) * 0.45, -1.5 + (i % 2) * 2);
+      environment.add(bubble);
+    }
+  } else {
+    const ground = mesh(new THREE.CircleGeometry(7.8, 64), new THREE.MeshStandardMaterial({ color: cfg.ground, roughness: 1 }), [0, 0, 0], [-Math.PI / 2, 0, 0]);
+    environment.add(ground);
+    if (type === 'savanna') {
+      for (let i = 0; i < 22; i++) addGrass(environment, -6 + (i * 1.71) % 12, -5.5 + ((i * 2.31) % 11), 0.8 + (i % 3) * 0.2, 5);
+      [[-4.8,-3.3,1.1],[4.2,-4.3,0.9],[-3.5,3.8,1.0],[4.8,2.8,1.3]].forEach(([x,z,s]) => addTree(environment,x,z,s,false));
+      addRock(environment,-2.8,-2.3,1.2,0x776e5b); addRock(environment,2.7,-1.7,0.9,0x6e6757);
+    } else if (type === 'forest') {
+      for (let i = 0; i < 14; i++) addTree(environment, -6 + (i * 2.1) % 12, -6 + ((i * 1.85) % 10), 0.85 + (i % 3) * 0.18, false);
+      for (let i = 0; i < 14; i++) addGrass(environment, -5.5 + (i * 1.42) % 11, -4.8 + ((i * 2.2) % 9), 0.55, 6);
+      addRock(environment, 2.4, -2.6, 0.9, 0x596058);
+    } else if (type === 'rainforest') {
+      for (let i = 0; i < 12; i++) addTree(environment, -6 + (i * 2.3) % 12, -5.8 + ((i * 1.97) % 10), 1.0 + (i % 2) * 0.25, true);
+      for (let i = 0; i < 18; i++) addGrass(environment, -5.6 + (i * 1.28) % 11, -4.9 + ((i * 1.73) % 9), 0.7, 5);
+      addRock(environment, 2.8, -2.7, 1.1, 0x566458); addRock(environment,-2.9,2.9,0.8,0x4c5d50);
+    } else if (type === 'wetland') {
+      const water = mesh(new THREE.CircleGeometry(5.7, 48), new THREE.MeshStandardMaterial({ color: 0x567f78, roughness: 0.15, metalness: 0.05, transparent: true, opacity: 0.72 }), [0, 0.02, -0.8], [-Math.PI / 2, 0, 0]);
+      environment.add(water);
+      for (let i = 0; i < 14; i++) addGrass(environment, -5.4 + (i * 1.55) % 10.5, -5.2 + ((i * 2.11) % 8), 0.85, 7);
+      [[-5.3,2.8,1.1],[5.0,2.5,0.95]].forEach(([x,z,s]) => addTree(environment,x,z,s,true));
+      addRock(environment,-3.6,-1.5,0.8,0x657064); addRock(environment,3.2,-2.2,1.0,0x5e675e);
+    } else if (type === 'meadow') {
+      for (let i = 0; i < 28; i++) addGrass(environment, -6 + (i * 1.37) % 12, -5.5 + ((i * 2.04) % 10), 0.7 + (i % 3) * 0.15, 6);
+      for (let i = 0; i < 7; i++) addTree(environment, -5.8 + (i * 2.05), 4.1 + (i % 2) * 0.7, 0.8 + (i % 2) * 0.15, false);
+      addRock(environment,4.5,-3.5,0.7,0x77766b);
+    } else if (type === 'mountain') {
+      addMountain(environment,-4.2,-3.7,1.45); addMountain(environment,4.5,-4.2,1.8); addMountain(environment,0.5,-5.3,1.2);
+      for (let i = 0; i < 14; i++) addTree(environment, -6 + (i * 1.75) % 12, -1.5 + ((i * 1.83) % 7), 0.7 + (i % 2) * 0.15, false);
+      for (let i = 0; i < 10; i++) addRock(environment,-5.5 + (i * 1.4) % 11,-4.5 + ((i * 1.27) % 7),0.5 + (i % 2) * 0.18,0x76786f);
+    } else if (type === 'coast') {
+      const sea = mesh(new THREE.CircleGeometry(5.2, 48), new THREE.MeshStandardMaterial({ color: 0x61a9c2, roughness: 0.18, transparent: true, opacity: 0.78 }), [0, 0.02, -1.3], [-Math.PI / 2, 0, 0]);
+      environment.add(sea);
+      for (let i = 0; i < 12; i++) addRock(environment,-5.8 + (i * 1.25) % 11,-5 + ((i * 1.9) % 8),0.4 + (i % 3) * 0.14,0x8c8878);
+      [[-4.6,3.4,0.8],[4.9,3.2,1.0]].forEach(([x,z,s]) => addTree(environment,x,z,s,false));
+    }
+  }
+
+  // distant soft sky disc / sun, kept simple so it works reliably on GitHub Pages
+  const sun = mesh(new THREE.SphereGeometry(0.55, 16, 12), new THREE.MeshBasicMaterial({ color: type === 'ocean' || type === 'seabed' ? 0x9de1f0 : 0xffe0a3 }), [4.8, 5.8, -5.8]);
+  environment.add(sun);
+
+  scene.add(environment);
+}
 
 function setup() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x080a0b);
-  scene.fog = new THREE.FogExp2(0x080a0b, 0.025);
+  scene.background = new THREE.Color(0xb9dcff);
+  scene.fog = new THREE.FogExp2(0xc5d9d1, 0.012);
+
   camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
   camera.position.set(0, 2.4, 8);
+
   renderer = new THREE.WebGLRenderer({ canvas: $('#stage'), antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
   controls.minDistance = 3.5;
   controls.maxDistance = 12;
   controls.target.set(0, 1.2, 0);
-  scene.add(new THREE.HemisphereLight(0xfff5e2, 0x101820, 2.5));
+
+  scene.add(new THREE.HemisphereLight(0xfff5e2, 0x36525d, 2.7));
   const key = new THREE.DirectionalLight(0xffd99c, 4);
   key.position.set(4, 7, 5);
   key.castShadow = true;
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x5b9dff, 2);
+  const rim = new THREE.DirectionalLight(0x74b8df, 2.2);
   rim.position.set(-5, 3, -4);
   scene.add(rim);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(7, 64), new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-  const grid = new THREE.GridHelper(12, 24, 0x342b1e, 0x161616);
-  grid.position.y = 0.01;
-  scene.add(grid);
+
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
   });
+
   animate();
 }
 
@@ -244,6 +402,7 @@ async function show(kind, gltf) {
   info(kind);
   renderAnimalButtons();
   renderActionButtons();
+  buildEnvironment(kind);
   if (current) {
     if (mixer) mixer.stopAllAction();
     scene.remove(current);
@@ -253,7 +412,7 @@ async function show(kind, gltf) {
   prepare(current, kind);
   scene.add(current);
   makeActions(gltf);
-  $('#modelStatus').textContent = `${SPECIES[kind].name} · 本地 GLB 已就绪`;
+  $('#modelStatus').textContent = `${SPECIES[kind].name} · ${ENVIRONMENTS[environmentFor(kind)] ? environmentFor(kind) : 'meadow'} 场景 · 本地 GLB 已就绪`;
   playAction('idle');
 }
 
@@ -302,6 +461,7 @@ setup();
 renderAnimalButtons();
 renderActionButtons();
 info(active);
+buildEnvironment(active);
 
 (async () => {
   const firstThree = ANIMALS.slice(0, 3).map((x) => x.id);
