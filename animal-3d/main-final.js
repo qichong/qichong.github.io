@@ -2,6 +2,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.m
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/DRACOLoader.js';
+import { initOfficialScenes, updateOfficialScenes } from './threejs-examples-scenes.js';
 import { ANIMALS } from './animal-manifest-realistic.js';
 
 const $ = (s) => document.querySelector(s);
@@ -53,6 +54,7 @@ function setup() {
   const grid = new THREE.GridHelper(12, 24, 0x342b1e, 0x161616);
   grid.position.y = 0.01;
   scene.add(grid);
+  initOfficialScenes(scene, () => active);
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -269,6 +271,7 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
   if (mixer) mixer.update(dt);
+  updateOfficialScenes(dt);
   controls?.update();
   renderer?.render(scene, camera);
 }
