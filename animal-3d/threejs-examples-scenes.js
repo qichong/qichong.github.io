@@ -12,6 +12,7 @@ const ANIMAL_TO_ENV = {
 
 let scene = null;
 let environment = null;
+let environmentSky = null;
 let water = null;
 let currentEnv = null;
 let waterNormals = null;
@@ -45,6 +46,10 @@ function disposeGroup(group) {
 }
 
 function addSky(type) {
+  if (environmentSky) {
+    scene.remove(environmentSky);
+    environmentSky = null;
+  }
   const sky = new Sky();
   sky.scale.setScalar(100);
   const uniforms = sky.material.uniforms;
@@ -62,11 +67,13 @@ function addSky(type) {
     sun.setFromSphericalCoords(1, THREE.MathUtils.degToRad(50), THREE.MathUtils.degToRad(205));
   }
   uniforms.sunPosition.value.copy(sun);
+  environmentSky = sky;
   scene.add(sky);
 }
 
 function addGround(group, color) {
-  addMesh(group, new THREE.CircleGeometry(14, 96), mat(color), [0, -0.025, 0], [-Math.PI / 2, 0, 0]);
+  // 使用无限感观的大平面，不再显示旧版圆形地台边缘。
+  addMesh(group, new THREE.PlaneGeometry(80, 80), mat(color), [0, -0.025, 0], [-Math.PI / 2, 0, 0]);
 }
 
 function addTree(group, x, z, scale = 1, pine = false) {
@@ -122,6 +129,10 @@ function build(type) {
   }
   water = null;
   waterNormals = null;
+  if (environmentSky) {
+    scene.remove(environmentSky);
+    environmentSky = null;
+  }
   scene.background = new THREE.Color(0x080a0b);
 
   if (!type || type === 'studio') return;
