@@ -18,6 +18,24 @@ const SOURCES = {
   deer: 'WildMesh 3D / Sketchfab · CC BY 4.0', rabbit: 'WildMesh 3D / Sketchfab · CC BY 4.0'
 };
 
+// 不同来源 GLB 的原始材质亮度差异很大。只校正明显偏暗的模型，正常模型保持原样。
+const MODEL_LIGHTING = {
+  lion:       { color: 1.00, emissive: 0.00 },
+  tiger:      { color: 1.00, emissive: 0.01 },
+  fox:        { color: 1.03, emissive: 0.015 },
+  black_panther: { color: 1.08, emissive: 0.02 },
+  lioness:    { color: 1.22, emissive: 0.035 },
+  alligator:  { color: 1.20, emissive: 0.03 },
+  horse:      { color: 1.16, emissive: 0.025 },
+  seagull:    { color: 1.03, emissive: 0.015 },
+  macaw:      { color: 1.02, emissive: 0.01 },
+  starfish:   { color: 1.03, emissive: 0.01 },
+  swordfish:  { color: 1.03, emissive: 0.01 },
+  tuna:       { color: 1.03, emissive: 0.01 },
+  deer:       { color: 1.12, emissive: 0.02 },
+  rabbit:     { color: 1.20, emissive: 0.035 }
+};
+
 const loader = new GLTFLoader();
 const draco = new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/');
@@ -46,32 +64,56 @@ function setup() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.35;
+  renderer.toneMappingExposure = 1.18;
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 3.5; controls.maxDistance = 12; controls.target.set(0, 1.2, 0);
 
-  // 更均匀的展馆补光：减少不同来源 GLB 因 PBR 材质差异产生的“黑脸”。
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x2b3440, 3.2));
+  // 中性展馆光：让不同作者的 PBR GLB 都有足够的环境填充，同时保留方向光阴影。
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x586575, 3.8));
 
-  const key = new THREE.DirectionalLight(0xfff3df, 4.2);
+  const key = new THREE.DirectionalLight(0xfff7ec, 4.6);
   key.position.set(5, 8, 6);
   key.castShadow = true;
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight(0xffffff, 2.2);
+  const fill = new THREE.DirectionalLight(0xffffff, 2.8);
   fill.position.set(-5, 5, 6);
   scene.add(fill);
 
-  const front = new THREE.PointLight(0xfff8ef, 1.1, 14, 2);
+  const front = new THREE.PointLight(0xfff9f0, 1.35, 16, 2);
   front.position.set(0, 3.6, 5.5);
   scene.add(front);
 
-  const rim = new THREE.DirectionalLight(0xcfe2ff, 1.15);
+  const top = new THREE.DirectionalLight(0xffffff, 1.2);
+  top.position.set(0, 8, 1);
+  scene.add(top);
+
+  const rim = new THREE.DirectionalLight(0xd7e5ff, 1.0);
   rim.position.set(-5, 4, -5);
   scene.add(rim);
 
   initOfficialScenes(scene, () => active);
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
   animate();
+}
+function tuneMaterial(m, kind) {
+  if (!m) return;
+  const cfg = MODEL_LIGHTING[kind] || { color: 1, emissive: 0 };
+  if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+  if (m.emissiveMap) m.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+  if (m.metalnessMap) m.metalnessMap.colorSpace = THREE.NoColorSpace;
+  if (m.roughnessMap) m.roughnessMap.colorSpace = THREE.NoColorSpace;
+  if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
+  if (m.aoMap) m.aoMap.colorSpace = THREE.NoColorSpace;
+
+  // 材质颜色在 Three.js PBR 中作为乘数使用；仅对偏暗来源做轻微提亮。
+  if (m.color) m.color.multiplyScalar(cfg.color);
+
+  // 只抬一点暗部，不改变高光和纹理细节。
+  if ('emissive' in m && cfg.emissive > 0) {
+    m.emissive.setScalar(cfg.emissive);
+    m.emissiveIntensity = 0.35;
+  }
+  m.needsUpdate = true;
 }
 function prepare(model, kind) {
   if (model.userData.animalPrepared) return;
@@ -84,23 +126,7 @@ function prepare(model, kind) {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
-    mats.forEach((m) => {
-      if (!m) return;
-      if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
-      if (m.emissiveMap) m.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-      if (m.metalnessMap) m.metalnessMap.colorSpace = THREE.NoColorSpace;
-      if (m.roughnessMap) m.roughnessMap.colorSpace = THREE.NoColorSpace;
-      if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
-      if (m.aoMap) m.aoMap.colorSpace = THREE.NoColorSpace;
-
-      // 对明显偏暗的材质只做轻微提亮，不改变原始贴图色相。
-      if (m.color) {
-        const brightness = m.color.r * 0.2126 + m.color.g * 0.7152 + m.color.b * 0.0722;
-        if (brightness < 0.42) m.color.multiplyScalar(1.12);
-      }
-      if ('envMapIntensity' in m) m.envMapIntensity = Math.max(m.envMapIntensity || 1, 1.15);
-      m.needsUpdate = true;
-    });
+    mats.forEach((m) => tuneMaterial(m, kind));
   });
   model.userData.animalPrepared = true;
 }
@@ -145,7 +171,7 @@ function playAnimation(index) {
 function renderActions(gltf) {
   currentAnimations = []; const clips = Array.isArray(gltf.animations) ? gltf.animations : []; stopMixer(); mixer = clips.length ? new THREE.AnimationMixer(gltf.scene) : null;
   clips.forEach((clip, index) => currentAnimations.push({ index, name: clip.name || `Animation ${index + 1}`, duration: clip.duration || 0, action: mixer.clipAction(clip) }));
-  $('#actions').innerHTML = clips.length ? currentAnimations.map((item) => `<button class="action" data-action-index="${item.index}" title="${item.name.replace(/\"/g, '&quot;')}">${label(item.name, item.index)} <small>${item.duration.toFixed(1)}s</small></button>`).join('') : '<div class="no-actions">这个 GLB 没有嵌入骨骼动画</div>';
+  $('#actions').innerHTML = clips.length ? currentAnimations.map((item) => `<button class="action" data-action-index="${item.index}" title="${item.name.replace(/"/g, '&quot;')}">${label(item.name, item.index)} <small>${item.duration.toFixed(1)}s</small></button>`).join('') : '<div class="no-actions">这个 GLB 没有嵌入骨骼动画</div>';
   $('#actionHint').textContent = clips.length ? `${clips.length} 个实际动画 · 来源：${SOURCES[active] || '来源信息未记录'}` : `0 个动画 · 来源：${SOURCES[active] || '来源信息未记录'}`;
   if (clips.length) playAnimation(0);
 }
@@ -162,16 +188,7 @@ async function load(kind) {
     gltf.scene.traverse((obj) => {
       if (!obj.isMesh) return;
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      mats.forEach((m) => {
-        if (!m) return;
-        if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
-        if (m.emissiveMap) m.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-        if (m.metalnessMap) m.metalnessMap.colorSpace = THREE.NoColorSpace;
-        if (m.roughnessMap) m.roughnessMap.colorSpace = THREE.NoColorSpace;
-        if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
-        if (m.aoMap) m.aoMap.colorSpace = THREE.NoColorSpace;
-        m.needsUpdate = true;
-      });
+      mats.forEach((m) => tuneMaterial(m, kind));
     });
     cache.set(kind, gltf); return gltf;
   })();
