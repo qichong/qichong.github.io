@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/DRACOLoader.js';
+import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/';
 import { initOfficialScenes, updateOfficialScenes } from './threejs-examples-scenes.js';
 import { ANIMALS } from './animal-manifest-realistic.js';
 
@@ -63,34 +63,14 @@ function setup() {
   renderer = new THREE.WebGLRenderer({ canvas: $('#stage'), antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // 保留原先的暗色电影感，只加入标准色调映射，不提高环境曝光。
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.0;
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 3.5; controls.maxDistance = 12; controls.target.set(0, 1.2, 0);
-
-  // 中性展馆光：让不同作者的 PBR GLB 都有足够的环境填充，同时保留方向光阴影。
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x586575, 3.8));
-
-  const key = new THREE.DirectionalLight(0xfff7ec, 4.6);
-  key.position.set(5, 8, 6);
-  key.castShadow = true;
-  scene.add(key);
-
-  const fill = new THREE.DirectionalLight(0xffffff, 2.8);
-  fill.position.set(-5, 5, 6);
-  scene.add(fill);
-
-  const front = new THREE.PointLight(0xfff9f0, 1.35, 16, 2);
-  front.position.set(0, 3.6, 5.5);
-  scene.add(front);
-
-  const top = new THREE.DirectionalLight(0xffffff, 1.2);
-  top.position.set(0, 8, 1);
-  scene.add(top);
-
-  const rim = new THREE.DirectionalLight(0xd7e5ff, 1.0);
-  rim.position.set(-5, 4, -5);
-  scene.add(rim);
-
+  // 原始环境灯光保持不变。
+  scene.add(new THREE.HemisphereLight(0xfff5e2, 0x101820, 2.5));
+  const key = new THREE.DirectionalLight(0xffd99c, 4); key.position.set(4, 7, 5); key.castShadow = true; scene.add(key);
+  const rim = new THREE.DirectionalLight(0x5b9dff, 2); rim.position.set(-5, 3, -4); scene.add(rim);
   initOfficialScenes(scene, () => active);
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
   animate();
@@ -104,11 +84,8 @@ function tuneMaterial(m, kind) {
   if (m.roughnessMap) m.roughnessMap.colorSpace = THREE.NoColorSpace;
   if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
   if (m.aoMap) m.aoMap.colorSpace = THREE.NoColorSpace;
-
-  // 材质颜色在 Three.js PBR 中作为乘数使用；仅对偏暗来源做轻微提亮。
+  // 只改模型自身材质颜色，不改变场景环境。
   if (m.color) m.color.multiplyScalar(cfg.color);
-
-  // 只抬一点暗部，不改变高光和纹理细节。
   if ('emissive' in m && cfg.emissive > 0) {
     m.emissive.setScalar(cfg.emissive);
     m.emissiveIntensity = 0.35;
