@@ -19,11 +19,20 @@ const SOURCES = {
 };
 
 const MODEL_LIGHTING = {
-  lion: { color: 1.00, emissive: 0.00 }, tiger: { color: 1.00, emissive: 0.01 }, fox: { color: 1.03, emissive: 0.015 },
-  black_panther: { color: 1.08, emissive: 0.02 }, lioness: { color: 1.22, emissive: 0.035 }, alligator: { color: 1.20, emissive: 0.03 },
-  horse: { color: 1.16, emissive: 0.025 }, seagull: { color: 1.03, emissive: 0.015 }, macaw: { color: 1.02, emissive: 0.01 },
-  starfish: { color: 1.03, emissive: 0.01 }, swordfish: { color: 1.03, emissive: 0.01 }, tuna: { color: 1.03, emissive: 0.01 },
-  deer: { color: 1.12, emissive: 0.02 }, rabbit: { color: 1.20, emissive: 0.035 }
+  lion:       { color: 1.00, emissive: 0.00 },
+  tiger:      { color: 1.00, emissive: 0.00 },
+  fox:        { color: 1.03, emissive: 0.008 },
+  black_panther: { color: 1.06, emissive: 0.012 },
+  lioness:    { color: 1.28, emissive: 0.018 },
+  alligator:  { color: 1.25, emissive: 0.016 },
+  horse:      { color: 1.18, emissive: 0.012 },
+  seagull:    { color: 1.03, emissive: 0.006 },
+  macaw:      { color: 1.02, emissive: 0.004 },
+  starfish:   { color: 1.03, emissive: 0.004 },
+  swordfish:  { color: 1.03, emissive: 0.004 },
+  tuna:       { color: 1.03, emissive: 0.004 },
+  deer:       { color: 1.14, emissive: 0.008 },
+  rabbit:     { color: 1.24, emissive: 0.014 }
 };
 
 const loader = new GLTFLoader();
@@ -53,7 +62,7 @@ function setup() {
   renderer = new THREE.WebGLRenderer({ canvas: $('#stage'), antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = THREE.NoToneMapping;
   renderer.toneMappingExposure = 1.0;
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 3.5; controls.maxDistance = 12; controls.target.set(0, 1.2, 0);
   scene.add(new THREE.HemisphereLight(0xfff5e2, 0x101820, 2.5));
@@ -73,7 +82,7 @@ function tuneMaterial(m, kind) {
   if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
   if (m.aoMap) m.aoMap.colorSpace = THREE.NoColorSpace;
   if (m.color) m.color.multiplyScalar(cfg.color);
-  if ('emissive' in m && cfg.emissive > 0) { m.emissive.setScalar(cfg.emissive); m.emissiveIntensity = 0.35; }
+  if ('emissive' in m && cfg.emissive > 0) { m.emissive.setScalar(cfg.emissive); m.emissiveIntensity = 0.18; }
   m.needsUpdate = true;
 }
 function prepare(model, kind) {
@@ -86,7 +95,8 @@ function prepare(model, kind) {
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true;
-    const mats = Array.isArray(o.material) ? o.material : [o.material]; mats.forEach((m) => tuneMaterial(m, kind));
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => tuneMaterial(m, kind));
   });
   model.userData.animalPrepared = true;
 }
@@ -101,7 +111,14 @@ async function applyEmbeddedTextureFallback(gltf, kind) {
   }
   if (!textures.length) return;
   let cursor = 0;
-  gltf.scene.traverse((obj) => { if (!obj.isMesh) return; const mats = Array.isArray(obj.material) ? obj.material : [obj.material]; mats.forEach((material) => { if (!material || material.map) return; material.map = textures[Math.min(cursor, textures.length - 1)]; cursor++; material.color?.set?.(0xffffff); material.needsUpdate = true; }); });
+  gltf.scene.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach((material) => {
+      if (!material || material.map) return;
+      material.map = textures[Math.min(cursor, textures.length - 1)]; cursor++; material.color?.set?.(0xffffff); material.needsUpdate = true;
+    });
+  });
 }
 function label(name, index) {
   const n = String(name || '').toLowerCase();
@@ -138,7 +155,11 @@ async function load(kind) {
     const modelUrl = new URL(d.url, location.href), resourcePath = new URL('.', modelUrl).href;
     const gltf = await new Promise((resolve, reject) => loader.parse(buffer, resourcePath, resolve, reject));
     await applyEmbeddedTextureFallback(gltf, kind);
-    gltf.scene.traverse((obj) => { if (!obj.isMesh) return; const mats = Array.isArray(obj.material) ? obj.material : [obj.material]; mats.forEach((m) => tuneMaterial(m, kind)); });
+    gltf.scene.traverse((obj) => {
+      if (!obj.isMesh) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      mats.forEach((m) => tuneMaterial(m, kind));
+    });
     cache.set(kind, gltf); return gltf;
   })();
   pending.set(kind, task); try { return await task; } finally { pending.delete(kind); }
