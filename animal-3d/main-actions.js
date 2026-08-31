@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/';
+import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/DRACOLoader.js';
 import { initOfficialScenes, updateOfficialScenes } from './threejs-examples-scenes.js';
 import { ANIMALS } from './animal-manifest-realistic.js';
 
@@ -18,22 +18,12 @@ const SOURCES = {
   deer: 'WildMesh 3D / Sketchfab · CC BY 4.0', rabbit: 'WildMesh 3D / Sketchfab · CC BY 4.0'
 };
 
-// 不同来源 GLB 的原始材质亮度差异很大。只校正明显偏暗的模型，正常模型保持原样。
 const MODEL_LIGHTING = {
-  lion:       { color: 1.00, emissive: 0.00 },
-  tiger:      { color: 1.00, emissive: 0.01 },
-  fox:        { color: 1.03, emissive: 0.015 },
-  black_panther: { color: 1.08, emissive: 0.02 },
-  lioness:    { color: 1.22, emissive: 0.035 },
-  alligator:  { color: 1.20, emissive: 0.03 },
-  horse:      { color: 1.16, emissive: 0.025 },
-  seagull:    { color: 1.03, emissive: 0.015 },
-  macaw:      { color: 1.02, emissive: 0.01 },
-  starfish:   { color: 1.03, emissive: 0.01 },
-  swordfish:  { color: 1.03, emissive: 0.01 },
-  tuna:       { color: 1.03, emissive: 0.01 },
-  deer:       { color: 1.12, emissive: 0.02 },
-  rabbit:     { color: 1.20, emissive: 0.035 }
+  lion: { color: 1.00, emissive: 0.00 }, tiger: { color: 1.00, emissive: 0.01 }, fox: { color: 1.03, emissive: 0.015 },
+  black_panther: { color: 1.08, emissive: 0.02 }, lioness: { color: 1.22, emissive: 0.035 }, alligator: { color: 1.20, emissive: 0.03 },
+  horse: { color: 1.16, emissive: 0.025 }, seagull: { color: 1.03, emissive: 0.015 }, macaw: { color: 1.02, emissive: 0.01 },
+  starfish: { color: 1.03, emissive: 0.01 }, swordfish: { color: 1.03, emissive: 0.01 }, tuna: { color: 1.03, emissive: 0.01 },
+  deer: { color: 1.12, emissive: 0.02 }, rabbit: { color: 1.20, emissive: 0.035 }
 };
 
 const loader = new GLTFLoader();
@@ -63,11 +53,9 @@ function setup() {
   renderer = new THREE.WebGLRenderer({ canvas: $('#stage'), antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  // 保留原先的暗色电影感，只加入标准色调映射，不提高环境曝光。
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 3.5; controls.maxDistance = 12; controls.target.set(0, 1.2, 0);
-  // 原始环境灯光保持不变。
   scene.add(new THREE.HemisphereLight(0xfff5e2, 0x101820, 2.5));
   const key = new THREE.DirectionalLight(0xffd99c, 4); key.position.set(4, 7, 5); key.castShadow = true; scene.add(key);
   const rim = new THREE.DirectionalLight(0x5b9dff, 2); rim.position.set(-5, 3, -4); scene.add(rim);
@@ -84,12 +72,8 @@ function tuneMaterial(m, kind) {
   if (m.roughnessMap) m.roughnessMap.colorSpace = THREE.NoColorSpace;
   if (m.normalMap) m.normalMap.colorSpace = THREE.NoColorSpace;
   if (m.aoMap) m.aoMap.colorSpace = THREE.NoColorSpace;
-  // 只改模型自身材质颜色，不改变场景环境。
   if (m.color) m.color.multiplyScalar(cfg.color);
-  if ('emissive' in m && cfg.emissive > 0) {
-    m.emissive.setScalar(cfg.emissive);
-    m.emissiveIntensity = 0.35;
-  }
+  if ('emissive' in m && cfg.emissive > 0) { m.emissive.setScalar(cfg.emissive); m.emissiveIntensity = 0.35; }
   m.needsUpdate = true;
 }
 function prepare(model, kind) {
@@ -102,8 +86,7 @@ function prepare(model, kind) {
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true;
-    const mats = Array.isArray(o.material) ? o.material : [o.material];
-    mats.forEach((m) => tuneMaterial(m, kind));
+    const mats = Array.isArray(o.material) ? o.material : [o.material]; mats.forEach((m) => tuneMaterial(m, kind));
   });
   model.userData.animalPrepared = true;
 }
@@ -118,14 +101,7 @@ async function applyEmbeddedTextureFallback(gltf, kind) {
   }
   if (!textures.length) return;
   let cursor = 0;
-  gltf.scene.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    mats.forEach((material) => {
-      if (!material || material.map) return;
-      material.map = textures[Math.min(cursor, textures.length - 1)]; cursor++; material.color?.set?.(0xffffff); material.needsUpdate = true;
-    });
-  });
+  gltf.scene.traverse((obj) => { if (!obj.isMesh) return; const mats = Array.isArray(obj.material) ? obj.material : [obj.material]; mats.forEach((material) => { if (!material || material.map) return; material.map = textures[Math.min(cursor, textures.length - 1)]; cursor++; material.color?.set?.(0xffffff); material.needsUpdate = true; }); });
 }
 function label(name, index) {
   const n = String(name || '').toLowerCase();
@@ -162,11 +138,7 @@ async function load(kind) {
     const modelUrl = new URL(d.url, location.href), resourcePath = new URL('.', modelUrl).href;
     const gltf = await new Promise((resolve, reject) => loader.parse(buffer, resourcePath, resolve, reject));
     await applyEmbeddedTextureFallback(gltf, kind);
-    gltf.scene.traverse((obj) => {
-      if (!obj.isMesh) return;
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      mats.forEach((m) => tuneMaterial(m, kind));
-    });
+    gltf.scene.traverse((obj) => { if (!obj.isMesh) return; const mats = Array.isArray(obj.material) ? obj.material : [obj.material]; mats.forEach((m) => tuneMaterial(m, kind)); });
     cache.set(kind, gltf); return gltf;
   })();
   pending.set(kind, task); try { return await task; } finally { pending.delete(kind); }
