@@ -19,6 +19,7 @@ let scene, camera, renderer, controls;
 let current = null;
 let mixer = null;
 let currentActions = {};
+let allAnimationActions = [];
 let active = 'lion';
 const clock = new THREE.Clock();
 
@@ -48,8 +49,6 @@ function setup() {
   rim.position.set(-5, 3, -4);
   scene.add(rim);
 
-  // 不再添加旧版的“黑色圆盘 + 方格网格”。
-  // 场景地面由 threejs-examples-scenes.js 的环境系统统一负责，避免出现圆形黑底。
   initOfficialScenes(scene, () => active);
 
   addEventListener('resize', () => {
@@ -71,12 +70,13 @@ function renderAnimalButtons() {
 
 function info(kind) {
   const d = SPECIES[kind];
+  if (!d) return;
   $('#animalNo').textContent = d.no;
   $('#name').textContent = d.name;
   $('#latin').textContent = d.latin;
   $('#tagline').textContent = `${d.category} · ${d.facts?.[0]?.[1] || ''}`;
-  $('#facts').innerHTML = d.facts.map(([a, b]) => `<div class="fact"><b>${a}</b><span>${b}</span></div>`).join('');
-  $('#desc').textContent = d.desc;
+  $('#facts').innerHTML = (d.facts || []).map(([a, b]) => `<div class="fact"><b>${a}</b><span>${b}</span></div>`).join('');
+  $('#desc').textContent = d.desc || '';
 }
 
 function updateProgress() {
@@ -103,6 +103,10 @@ async function fetchBuffer(kind) {
     s.loaded = buffer.byteLength;
     s.total = buffer.byteLength;
     updateProgress();
+    if (buffer.byteLength < 20) throw new Error(`${d.name} GLB 文件过小`);
+    const magic = new Uint8Array(buffer, 0, 4);
+    const signature = String.fromCharCode(magic[0], magic[1], magic[2], magic[3]);
+    if (signature !== 'glTF') throw new Error(`${d.name} 不是有效 GLB（magic=${signature}）`);
     return buffer;
   })();
   pending.set(kind, p);
@@ -139,14 +143,12 @@ async function applyEmbeddedTextureFallback(gltf, kind) {
     if (!obj.isMesh) return;
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     mats.forEach((material) => {
-      if (!material) return;
-      if (!material.map) {
-        const texture = textures[Math.min(textureCursor, textures.length - 1)];
-        material.map = texture;
-        textureCursor += 1;
-        material.color?.set?.(0xffffff);
-        material.needsUpdate = true;
-      }
+      if (!material || material.map) return;
+      const texture = textures[Math.min(textureCursor, textures.length - 1)];
+      material.map = texture;
+      textureCursor += 1;
+      material.color?.set?.(0xffffff);
+      material.needsUpdate = true;
     });
   });
 }
@@ -197,55 +199,129 @@ function prepare(model, kind) {
   model.userData.animalPrepared = true;
 }
 
+function animationCategory(name) {
+  const n = String(name || '').toLowerCase().replace(/[|:/\\-]+/g, ' ');
+  if (/idle|stand|survey|rest|breath|wait|look|alert/.test(n)) return 'idle';
+  if (/run|running|gallop|sprint|charge/.test(n)) return 'run';
+  if (/walk|walking|stroll|locomotion|move|trot/.test(n)) return 'walk';
+  if (/attack|roar|growl|aggr|bite|claw|strike|hit|fight|call|cry/.test(n)) return 'attack';
+  if (/dead|death|die|dying|fall|faint/.test(n)) return 'death';
+  return null;
+}
+
 function makeActions(gltf) {
+  mixer = null;
   currentActions = {};
-  if (!gltf.animations?.length) return;
+  allAnimationActions = [];
+  const clips = Array.isArray(gltf.animations) ? gltf.animations : [];
+  if (!clips.length) return;
+
   mixer = new THREE.AnimationMixer(gltf.scene);
-  for (const clip of gltf.animations) {
-    const n = clip.name || '';
-    if (!currentActions.idle && /idle|stand|survey|rest|breath|wait/i.test(n)) currentActions.idle = mixer.clipAction(clip);
-    if (!currentActions.walk && /walk|walking|stroll|run|running|locomotion|move/i.test(n)) currentActions.walk = mixer.clipAction(clip);
-    if (!currentActions.roar && /roar|growl|attack|call|cry|bite/i.test(n)) currentActions.roar = mixer.clipAction(clip);
-  }
-  if (!currentActions.idle) currentActions.idle = mixer.clipAction(gltf.animations[0]);
+  clips.forEach((clip, index) => {
+    const action = mixer.clipAction(clip);
+    const category = animationCategory(clip.name);
+    const item = { index, name: clip.name || `Animation ${index + 1}`, action, category };
+    allAnimationActions.push(item);
+    if (category && !currentActions[category]) currentActions[category] = action;
+  });
+
+  // 某些导出器会给第一段动作一个没有语义的名字，仍然保证 Idle 可播放。
+  if (!currentActions.idle) currentActions.idle = allAnimationActions[0].action;
+
+  // Run 缺失时，Walk 作为安全降级；Attack / Death 同理不强行冒充。
+  if (!currentActions.run && currentActions.walk) currentActions.run = currentActions.walk;
 }
 
 function renderActionButtons() {
-  $('#actions').innerHTML = '<button class="action" data-action="idle">◌ Idle</button><button class="action" data-action="walk">↗ Walk / Run</button><button class="action" data-action="roar">◉ Attack / Call</button>';
+  const labels = [
+    ['idle', '◌ Idle'],
+    ['walk', '↗ Walk'],
+    ['run', '➜ Run'],
+    ['attack', '◉ Attack'],
+    ['death', '✕ Death']
+  ];
+  const semantic = labels
+    .filter(([id]) => Boolean(currentActions[id]))
+    .map(([id, text]) => `<button class="action" data-action="${id}">${text}</button>`)
+    .join('');
+
+  const raw = allAnimationActions
+    .filter((item) => item.name && !['idle', 'walk', 'run', 'attack', 'death'].includes(item.category))
+    .map((item) => `<button class="action action-raw" data-action-index="${item.index}" title="${item.name.replace(/"/g, '&quot;')}">◇ ${item.name}</button>`)
+    .join('');
+
+  $('#actions').innerHTML = semantic + raw;
+  $('#actionHint').textContent = allAnimationActions.length
+    ? `检测到 ${allAnimationActions.length} 个原始动画；已按来源动作自动映射。`
+    : '当前模型没有骨骼动作。';
+}
+
+function stopAllActions() {
+  const seen = new Set();
+  Object.values(currentActions).forEach((action) => {
+    if (!action || seen.has(action)) return;
+    seen.add(action);
+    action.stop();
+  });
+  allAnimationActions.forEach((item) => {
+    if (!item.action || seen.has(item.action)) return;
+    seen.add(item.action);
+    item.action.stop();
+  });
+}
+
+function playSpecificAction(action, label, once = false, rawIndex = null) {
+  if (!mixer || !action) {
+    $('#actionHint').textContent = '当前模型没有可播放的骨骼动作。';
+    return;
+  }
+  stopAllActions();
+  action.reset().fadeIn(0.18).play();
+  action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+  action.clampWhenFinished = once;
+
+  document.querySelectorAll('.action').forEach((b) => {
+    b.classList.toggle('active', rawIndex != null
+      ? b.dataset.actionIndex === String(rawIndex)
+      : b.dataset.action === label);
+  });
+  $('#actionHint').textContent = `${SPECIES[active].name}：${label}`;
 }
 
 function playAction(mode) {
-  document.querySelectorAll('.action').forEach((b) => b.classList.toggle('active', b.dataset.action === mode));
-  const action = currentActions[mode] || currentActions.idle;
-  const hasExact = Boolean(currentActions[mode]);
+  const action = currentActions[mode];
   if (!action) {
-    $('#actionHint').textContent = '当前模型没有骨骼动作。';
+    $('#actionHint').textContent = `${SPECIES[active].name}：暂无 ${mode} 动作`;
     return;
   }
-  Object.values(currentActions).forEach((a) => a.stop());
-  action.reset().fadeIn(0.18).play();
-  const once = mode === 'roar';
-  action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
-  action.clampWhenFinished = once;
-  $('#actionHint').textContent = hasExact ? `${SPECIES[active].name}：${action.getClip().name}` : `${SPECIES[active].name}：使用可用动作`;
+  const clipName = action.getClip()?.name || mode;
+  playSpecificAction(action, clipName, mode === 'attack' || mode === 'death');
+}
+
+function playRawAction(index) {
+  const item = allAnimationActions.find((x) => x.index === index);
+  if (!item) return;
+  playSpecificAction(item.action, item.name, Boolean(item.category === 'attack' || item.category === 'death'), index);
 }
 
 async function show(kind, gltf) {
   active = kind;
   info(kind);
-  renderAnimalButtons();
-  renderActionButtons();
   if (current) {
-    if (mixer) mixer.stopAllAction();
+    if (mixer) stopAllActions();
     scene.remove(current);
   }
   mixer = null;
+  currentActions = {};
+  allAnimationActions = [];
   current = gltf.scene;
   prepare(current, kind);
   scene.add(current);
   makeActions(gltf);
+  renderAnimalButtons();
+  renderActionButtons();
   $('#modelStatus').textContent = `${SPECIES[kind].name} · 本地 GLB 已就绪`;
-  playAction('idle');
+  if (currentActions.idle) playAction('idle');
 }
 
 async function select(kind) {
@@ -277,14 +353,18 @@ $('.animals').addEventListener('click', (e) => {
   const b = e.target.closest('.animal');
   if (b) select(b.dataset.animal);
 });
+
 $('#actions').addEventListener('click', (e) => {
   const b = e.target.closest('.action');
-  if (b) playAction(b.dataset.action);
+  if (!b) return;
+  if (b.dataset.actionIndex != null) playRawAction(Number(b.dataset.actionIndex));
+  else if (b.dataset.action) playAction(b.dataset.action);
 });
+
 $('#voiceBtn').addEventListener('click', () => {
   const d = SPECIES[active];
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(d.speech);
+  const u = new SpeechSynthesisUtterance(d.speech || `现在看到的是${d.name}。`);
   u.lang = 'zh-CN';
   u.rate = 0.92;
   speechSynthesis.speak(u);
