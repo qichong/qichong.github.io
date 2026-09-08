@@ -8,7 +8,6 @@ fetch(dataPath).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).th
  <div class="block"><h4>核心事实</h4><p class="facts">${item.fact}</p></div>
  <div class="block"><h4>为什么值得关注</h4><p>${item.why}</p></div>
  <div class="block"><h4>背景 / 技术解读</h4><p>${item.analysis}</p></div>
- <div class="block impact" id="frontend"><h4>对前端 / React / Vue / Web 开发者的启发</h4><p>${item.frontend}</p></div>
  <div class="source"><b>信息来源（${item.sourceName}）</b><a class="source-url" href="${item.url}" target="_blank" rel="noopener noreferrer">${item.url}</a></div>
  </div></article>`).join('');
 }).catch(err=>{box.innerHTML=`<div class="empty">今日简报加载失败：${err.message}</div>`});
