@@ -1,4 +1,4 @@
-const dataPath='./data/2026/09/08.json';
+const dataPath='./data/2026/09/09.json';
 const icons=['◈','⌘','⚡','◉','✦'];
 const box=document.querySelector('#brief-cards');
 fetch(dataPath).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(data=>{
